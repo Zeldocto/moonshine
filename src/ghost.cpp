@@ -201,6 +201,7 @@ bool sBoundaryPending;
 bool sLiveRouteValid;
 bool sPlaybackPinned;
 bool sPinRouteCheckPending;
+bool sChallengerNotified;
 RaceSource sPlaybackRaceSource;
 u32 sPlaybackRaceToken;
 RaceContext sRaceContext;
@@ -525,6 +526,7 @@ void clearTrack(Track &track) {
 
 void bumpRecordToken() {
     sRecord.saved = false;
+    sChallengerNotified = false;
     sRecordToken = (sRecordToken + 1) & ~kPlaybackTokenBit;
     if (sRecordToken == 0) sRecordToken++;
 }
@@ -1339,8 +1341,9 @@ void beginAttempt(s32 qf, bool boundaryReset = false) {
     sRecording = !keepChallenger;
     prepareClock(qf);
     if (sRecording && appendSegment()) startEpochSamples(qf);
-    if (keepChallenger && gMenu) {
+    if (keepChallenger && !sChallengerNotified && gMenu) {
         gMenu->toast("Ghost challenger ready: save or unpin");
+        sChallengerNotified = true;
     }
 
 }

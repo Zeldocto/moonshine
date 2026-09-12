@@ -452,14 +452,14 @@ class LayoutAndPersistenceContracts(unittest.TestCase):
 
     def test_v8_uses_new_files_and_v7_is_read_only_migration_input(self) -> None:
         kernel = KERNEL.read_text(encoding="utf-8")
-        self.assertIn("susamune_il_stats_v8_a.bin", kernel)
-        self.assertIn("susamune_il_stats_v8_b.bin", kernel)
-        self.assertIn("susamune_il_stats_v7_a.bin", kernel)
-        self.assertIn("susamune_il_stats_v7_b.bin", kernel)
-        self.assertIn("susamune_il_stats_v6_a.bin", kernel)
-        self.assertIn("susamune_il_stats_v6_b.bin", kernel)
-        self.assertIn("susamune_il_stats_v5_a.bin", kernel)
-        self.assertIn("susamune_il_stats_v5_b.bin", kernel)
+        self.assertIn("moonshine_il_stats_v8_a.bin", kernel)
+        self.assertIn("moonshine_il_stats_v8_b.bin", kernel)
+        self.assertIn("moonshine_il_stats_v7_a.bin", kernel)
+        self.assertIn("moonshine_il_stats_v7_b.bin", kernel)
+        self.assertIn("moonshine_il_stats_v6_a.bin", kernel)
+        self.assertIn("moonshine_il_stats_v6_b.bin", kernel)
+        self.assertIn("moonshine_il_stats_v5_a.bin", kernel)
+        self.assertIn("moonshine_il_stats_v5_b.bin", kernel)
         init = function_block(kernel, "static bool InitSplitStatsV8Files(")
         self.assertIn("ReadSplitStatsV7File", init)
         self.assertIn("MigrateSplitStatsV7", init)
@@ -472,8 +472,8 @@ class LayoutAndPersistenceContracts(unittest.TestCase):
         self.assertNotIn("v7Paths[target]", writer)
         self.assertNotIn("v6Paths[target]", writer)
         self.assertNotIn("v5Paths[target]", writer)
-        self.assertNotIn("susamune_il_stats_v6", writer)
-        self.assertNotIn("susamune_il_stats_v5", writer)
+        self.assertNotIn("moonshine_il_stats_v6", writer)
+        self.assertNotIn("moonshine_il_stats_v5", writer)
 
     def test_future_or_unknown_current_files_disable_writes_and_fallback(self) -> None:
         kernel = KERNEL.read_text(encoding="utf-8")

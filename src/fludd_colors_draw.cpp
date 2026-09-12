@@ -1,5 +1,6 @@
 #include "susamune/fludd_colors.hxx"
 #include "susamune/fludd_color_texture.hxx"
+#include "susamune/retail_input.hxx"
 #include "Dolphin/GX.h"
 #include "Dolphin/mem.h"
 #include "JSystem/J3D/J3DModel.hxx"
@@ -45,8 +46,8 @@ bool mem1(const void *p, u32 size) {
            size <= 0x81800000u - address;
 }
 bool live() {
-    return gpApplication.mContext == TApplication::CONTEXT_DIRECT_STAGE &&
-        gpMarDirector && gpMarDirector == sDraw.director && gpMarDirector->_260 &&
+    return gpMarDirector && RetailInput::stageDirector() == gpMarDirector &&
+        gpMarDirector == sDraw.director && gpMarDirector->_260 &&
         gpMarDirector->mCurState >= TMarDirector::STATE_GAME_STARTING &&
         gpMarioAddress && gpMarioAddress == sDraw.mario;
 }

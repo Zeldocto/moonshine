@@ -5,6 +5,7 @@
 #include "ff_utf8.h"
 #include "string.h"
 #include "susamune/crash_report.h"
+#include "susamune/data_paths.h"
 #include "susamune/mod_bin.h"
 #include "vsprintf.h"
 
@@ -13,9 +14,13 @@ extern int dbgprintf(const char *fmt, ...);
 
 static struct SusamuneCrashReport Snapshot;
 static struct SusamuneCrashCore CoreSnapshot;
-static char BinPaths[2][64];
-static char TextPaths[2][64];
-static char CorePaths[2][64];
+#define CRASH_HISTORY_COUNT 16
+static char CrashDirectory[64];
+static char BinPath[64];
+static char TextPath[64];
+static char CorePath[64];
+static u32 History[CRASH_HISTORY_COUNT];
+static u32 HistoryCount;
 static char Line[256];
 static u32 AttemptedSeq;
 static u32 SeenCoreSeq;
@@ -132,6 +137,112 @@ static bool ReadCore(const char *path)
 		ValidCore(&CoreSnapshot);
 }
 
+static void RememberGeneration(u32 sequence)
+{
+	u32 i, j;
+	if (!sequence) return;
+	for (i = 0; i < HistoryCount; ++i)
+	{
+		if (History[i] == sequence) return;
+		if (GenerationNewer(sequence, History[i])) break;
+	}
+	if (i == CRASH_HISTORY_COUNT) return;
+	if (HistoryCount < CRASH_HISTORY_COUNT) ++HistoryCount;
+	for (j = HistoryCount - 1; j > i; --j) History[j] = History[j - 1];
+	History[i] = sequence;
+}
+
+static bool HistoryEntry(const FILINFO *entry, u32 *sequence, u32 *kind)
+{
+	char leaf[32];
+	u32 i, value = 0;
+	if (entry->fattrib & AM_DIR) return false;
+	for (i = 0; i < sizeof(leaf); ++i)
+	{
+		if (entry->fname[i] > 0x7fu) return false;
+		leaf[i] = (char)entry->fname[i];
+		if (leaf[i] >= 'A' && leaf[i] <= 'Z') leaf[i] += 'a' - 'A';
+		if (!leaf[i]) break;
+	}
+	if (i == sizeof(leaf) || strncmp(leaf, "moonshine_crash_", 16)) return false;
+	for (i = 16; i < 24; ++i)
+	{
+		u32 digit = (u8)leaf[i];
+		if (digit >= '0' && digit <= '9') digit -= '0';
+		else if (digit >= 'a' && digit <= 'f') digit -= 'a' - 10;
+		else return false;
+		value = (value << 4) | digit;
+	}
+	if (!strcmp(leaf + 24, ".core")) *kind = 1;
+	else if (!strcmp(leaf + 24, ".bin")) *kind = 0;
+	else if (!strcmp(leaf + 24, ".txt")) *kind = 2;
+	else return false;
+	if (!value) return false;
+	*sequence = value;
+	return true;
+}
+
+static bool OpenHistory(DIR *directory)
+{
+	return f_opendir_char(directory, CrashDirectory) == FR_OK;
+}
+
+static bool ScanHistory(u32 *generation)
+{
+	DIR directory;
+	FILINFO entry;
+	u32 sequence, kind, i;
+	int ret;
+	char path[64];
+	HistoryCount = 0;
+	if (!OpenHistory(&directory)) return false;
+	while ((ret = f_readdir(&directory, &entry)) == FR_OK && entry.fname[0])
+	{
+		if (!HistoryEntry(&entry, &sequence, &kind)) continue;
+		// Even an unfinished report owns its name after a reboot.
+		if (!*generation || GenerationNewer(sequence, *generation)) *generation = sequence;
+		for (i = 0; i < HistoryCount && History[i] != sequence; ++i) {}
+		if (kind == 2 || i < HistoryCount) continue;
+		_sprintf(path, "%s/moonshine_crash_%08X.%s", CrashDirectory,
+			sequence, kind ? "core" : "bin");
+		if (kind ? (ReadCore(path) && CoreSnapshot.captureSeq == sequence) :
+			(ReadReport(path, &Snapshot) && Snapshot.captureSeq == sequence))
+			RememberGeneration(sequence);
+	}
+	if (f_closedir(&directory) != FR_OK) return false;
+	return ret == FR_OK;
+}
+
+static void TrimHistory(void)
+{
+	DIR directory;
+	FILINFO entry;
+	u32 sequence, kind, i;
+	char path[64];
+	static const char *extensions[] = { "core", "bin", "txt" };
+	if (HistoryCount < CRASH_HISTORY_COUNT || !OpenHistory(&directory)) return;
+	while (f_readdir(&directory, &entry) == FR_OK && entry.fname[0])
+	{
+		if (!HistoryEntry(&entry, &sequence, &kind) ||
+			!GenerationNewer(History[HistoryCount - 1], sequence)) continue;
+		for (i = 0; i < 3; ++i)
+		{
+			_sprintf(path, "%s/moonshine_crash_%08X.%s", CrashDirectory,
+				sequence, extensions[i]);
+			f_unlink_char(path);
+		}
+	}
+	f_closedir(&directory);
+}
+
+static bool PrepareHistory(void)
+{
+	FILINFO info;
+	const int result = f_mkdir_char(CrashDirectory);
+	return result == FR_OK || (result == FR_EXIST &&
+		f_stat_char(CrashDirectory, &info) == FR_OK && (info.fattrib & AM_DIR));
+}
+
 static u32 ModFileCrc(const struct SusamuneModHeader *header, u32 fileSize)
 {
 	return SusamuneCrc32(header, fileSize);
@@ -166,28 +277,22 @@ void SusamuneCrashInit(void)
 	LastAttempt = LastPoll;
 	memset(SUSAMUNE_CRASH_CORE_PHYS_PTR, 0, sizeof(CoreSnapshot));
 	sync_after_write(SUSAMUNE_CRASH_CORE_PHYS_PTR, sizeof(CoreSnapshot));
-	_sprintf(BinPaths[0], "%s/susamune_crash_a.bin",
+	_sprintf(CrashDirectory, "%s" MOONSHINE_CRASH_DIRECTORY,
 		SusamuneCfgStoragePrefix());
-	_sprintf(BinPaths[1], "%s/susamune_crash_b.bin",
-		SusamuneCfgStoragePrefix());
-	_sprintf(TextPaths[0], "%s/susamune_crash_a.txt",
-		SusamuneCfgStoragePrefix());
-	_sprintf(TextPaths[1], "%s/susamune_crash_b.txt",
-		SusamuneCfgStoragePrefix());
-	_sprintf(CorePaths[0], "%s/susamune_crash_a.core",
-		SusamuneCfgStoragePrefix());
-	_sprintf(CorePaths[1], "%s/susamune_crash_b.core",
-		SusamuneCfgStoragePrefix());
+	CrashEnabled = CrashEnabled && PrepareHistory();
 
 	if (CrashEnabled)
 	{
+		CrashEnabled = ScanHistory(&generation);
 		for (i = 0; i < 2; ++i)
 		{
-			if (ReadReport(BinPaths[i], &Snapshot) &&
-				GenerationNewer(Snapshot.captureSeq, generation))
+			_sprintf(BinPath, "%s/moonshine_crash_%c.bin", CrashDirectory, 'a' + i);
+			_sprintf(CorePath, "%s/moonshine_crash_%c.core", CrashDirectory, 'a' + i);
+			if (ReadReport(BinPath, &Snapshot) &&
+				(!generation || GenerationNewer(Snapshot.captureSeq, generation)))
 				generation = Snapshot.captureSeq;
-			if (ReadCore(CorePaths[i]) &&
-				GenerationNewer(CoreSnapshot.captureSeq, generation))
+			if (ReadCore(CorePath) &&
+				(!generation || GenerationNewer(CoreSnapshot.captureSeq, generation)))
 				generation = CoreSnapshot.captureSeq;
 		}
 	}
@@ -298,11 +403,11 @@ static void EmitHex(const char *label, u32 base, const u8 *data, u32 size)
 	}
 }
 
-static int WriteText(u32 target)
+static int WriteText(void)
 {
 	u32 i, start;
 	int closeRet;
-	TextStatus = f_open_char(&TextFile, TextPaths[target],
+	TextStatus = f_open_char(&TextFile, TextPath,
 		FA_WRITE | FA_CREATE_ALWAYS);
 	if (TextStatus != FR_OK)
 		return TextStatus;
@@ -448,6 +553,23 @@ static int WriteBinary(const char *path, const void *data, u32 size)
 		if (ret == FR_OK && closeRet != FR_OK)
 			ret = closeRet;
 	}
+	if (ret == FR_OK)
+	{
+		u32 offset = 0;
+		ret = f_open_char(&file, path, FA_READ | FA_OPEN_EXISTING);
+		if (ret != FR_OK) return ret;
+		if (file.obj.objsize != size) ret = FR_DISK_ERR;
+		while (ret == FR_OK && offset < size)
+		{
+			const u32 count = size - offset < sizeof(Line) ? size - offset : sizeof(Line);
+			ret = f_read(&file, Line, count, &wrote);
+			if (ret == FR_OK && (wrote != count || memcmp(Line, (const u8 *)data + offset, count)))
+				ret = FR_DISK_ERR;
+			offset += count;
+		}
+		closeRet = f_close(&file);
+		if (ret == FR_OK && closeRet != FR_OK) ret = closeRet;
+	}
 	return ret;
 }
 
@@ -456,7 +578,7 @@ void SusamuneCrashService(void)
 	struct SusamuneCrashReport *mailbox = SUSAMUNE_CRASH_PHYS_PTR;
 	struct SusamuneCrashCore *core = SUSAMUNE_CRASH_CORE_PHYS_PTR;
 	bool fullValid, coreValid;
-	u32 sequence, target;
+	u32 sequence;
 	int ret, error = FR_OK;
 
 	sync_before_read(mailbox, sizeof(*mailbox));
@@ -479,6 +601,9 @@ void SusamuneCrashService(void)
 		AttemptedSeq = sequence;
 		Attempts = SavedFlags = 0;
 		HaveFull = HaveCore = RetryPending = false;
+		_sprintf(BinPath, "%s/moonshine_crash_%08X.bin", CrashDirectory, sequence);
+		_sprintf(CorePath, "%s/moonshine_crash_%08X.core", CrashDirectory, sequence);
+		_sprintf(TextPath, "%s/moonshine_crash_%08X.txt", CrashDirectory, sequence);
 	}
 	LastAttempt = read32(HW_TIMER);
 	++Attempts;
@@ -494,27 +619,32 @@ void SusamuneCrashService(void)
 		SavedFlags &= ~SUSAMUNE_CRASH_SAVED_TEXT;
 	}
 	HaveCore = coreValid && CoreSnapshot.captureSeq == sequence;
-	target = sequence & 1u;
 	PublishAck(SUSAMUNE_CRASH_ACK_PENDING, 0);
 	if (HaveCore && !(SavedFlags & SUSAMUNE_CRASH_SAVED_CORE))
 	{
-		ret = WriteBinary(CorePaths[target], &CoreSnapshot, sizeof(CoreSnapshot));
+		ret = WriteBinary(CorePath, &CoreSnapshot, sizeof(CoreSnapshot));
 		if (ret == FR_OK) SavedFlags |= SUSAMUNE_CRASH_SAVED_CORE;
 		else error = ret;
 	}
 	if (HaveFull && !(SavedFlags & SUSAMUNE_CRASH_SAVED_FULL))
 	{
-		ret = WriteBinary(BinPaths[target], &Snapshot, sizeof(Snapshot));
+		ret = WriteBinary(BinPath, &Snapshot, sizeof(Snapshot));
 		if (ret == FR_OK) SavedFlags |= SUSAMUNE_CRASH_SAVED_FULL;
 		else if (error == FR_OK) error = ret;
 	}
 	if (!(SavedFlags & SUSAMUNE_CRASH_SAVED_TEXT))
 	{
-		ret = WriteText(target);
+		ret = WriteText();
 		if (ret == FR_OK) SavedFlags |= SUSAMUNE_CRASH_SAVED_TEXT;
 		else if (error == FR_OK) error = ret;
 	}
 	RetryPending = error != FR_OK && Attempts < 3;
+	// A failed new write never retires an older report.
+	if (error == FR_OK && (SavedFlags & (SUSAMUNE_CRASH_SAVED_CORE | SUSAMUNE_CRASH_SAVED_FULL)))
+	{
+		RememberGeneration(sequence);
+		TrimHistory();
+	}
 	PublishAck(error != FR_OK ? (RetryPending ? SUSAMUNE_CRASH_ACK_PENDING :
 		SUSAMUNE_CRASH_ACK_FAILED) : (HaveFull ? SUSAMUNE_CRASH_ACK_SAVED :
 		SUSAMUNE_CRASH_ACK_CORE_ONLY), error);

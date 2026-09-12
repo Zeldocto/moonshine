@@ -2,7 +2,7 @@
 
 Susamune launcher settings, loader side.
 
-The [nintendont] section of susamune.ini holds everything the launcher GUI
+The [nintendont] section of moonshine.ini holds everything the launcher GUI
 edits: which game version to boot, where each version's disc image lives, and
 the handful of Nintendont options that used to live in nincfg.bin. nincfg.bin
 is gone -- the kernel takes NIN_CFG through the MEM2 handoff, so the file was
@@ -11,7 +11,7 @@ disagreeing about the same options.
 
 Reads and writes go to the device the launcher was run from, never the game's
 device. The kernel mounts that device as drive 1 when the two differ, so there
-is exactly one susamune.ini no matter where the ISO lives.
+is exactly one moonshine.ini no matter where the ISO lives.
 
 The other sections belong to the mod ([settings_<region>], [binds_<region>])
 and are copied through untouched, which is the mirror image of what the kernel
@@ -89,7 +89,7 @@ int SusamuneIniSave(const char *device);
 bool SusamuneIniNeedsWrite(void);
 
 /**
- * Can susamune.ini be written on this device? Probed once at startup so the
+ * Can moonshine.ini be written on this device? Probed once at startup so the
  * menu can say up front that nothing will persist, instead of only finding out
  * when the user changes something.
  */

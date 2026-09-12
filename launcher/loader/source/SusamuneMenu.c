@@ -226,7 +226,7 @@ static bool SaveIfDirty(void)
 	{
 		// Non-fatal: the user's choices still apply to this boot.
 		snprintf(ErrorLine, sizeof(ErrorLine),
-			 SusamuneText("Settings were not saved: %s:/susamune.ini is not writable"),
+			 SusamuneText("Settings were not saved: %s:/Moonshine data/moonshine.ini is not writable"),
 			 LauncherDev);
 		return false;
 	}
@@ -234,7 +234,7 @@ static bool SaveIfDirty(void)
 	{
 		// Non-fatal: the user's choices still apply to this boot.
 		snprintf(ErrorLine, sizeof(ErrorLine),
-			 SusamuneText("Could not write %s:/susamune.ini"), LauncherDev);
+			 SusamuneText("Could not write %s:/Moonshine data/moonshine.ini"), LauncherDev);
 		CanSave = false;
 		return false;
 	}
@@ -979,7 +979,7 @@ static void GuideScreen(void)
 
 		ClearScreen();
 		PrintCenter(BLACK, MENU_POS_Y, "Moonshine guide");
-		PrintCenter(BLACK, MENU_POS_Y + 20, "V2.3.0 Frame By Frame");
+		PrintCenter(BLACK, MENU_POS_Y + 20, "V2.3.1 Frame By Frame");
 		GRRLIB_Rectangle(MENU_POS_X, MENU_POS_Y + 92,
 			640 - MENU_POS_X*2, 286, 0xFFFFFFD8, true);
 		if (reading)

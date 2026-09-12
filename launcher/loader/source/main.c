@@ -56,6 +56,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "SusamuneShadowAsset.h"
 #include "SusamuneTheme.h"
 #include "SusamuneThemeFiles.h"
+#include "MoonshineData.h"
 #include "SusamuneText.h"
 #include "susamune/mem2_map.h"
 
@@ -1772,7 +1773,16 @@ int main(int argc, char **argv)
 		ExitToLoader(1);
 	}
 	{
-		FRESULT themeDirectory = SusamuneThemeEnsureDirectory(GetRootDevice());
+		FRESULT dataLayout = MoonshineDataPrepare(GetRootDevice());
+		FRESULT themeDirectory;
+		if (dataLayout != FR_OK)
+		{
+			char message[160];
+			snprintf(message, sizeof(message), "Could not prepare Moonshine data (%u).\nYour old files have been kept.\nCheck the SD/USB device and try again.", (unsigned int)dataLayout);
+			ShowMessageScreen(message);
+			ExitToLoader(1);
+		}
+		themeDirectory = SusamuneThemeEnsureDirectory(GetRootDevice());
 		if (themeDirectory != FR_OK)
 			gprintf("Moonshine: optional theme folder unavailable (%u)\n", (unsigned int)themeDirectory);
 	}
@@ -1819,7 +1829,7 @@ int main(int argc, char **argv)
 	{
 		char warning[128];
 		snprintf(warning, sizeof(warning),
-			 "Warning: %s:/susamune.ini is not writable.\nSettings cannot be saved.",
+			 "Warning: %s:/Moonshine data/moonshine.ini is not writable.\nSettings cannot be saved.",
 			 GetRootDevice());
 		ShowMessageScreen(warning);
 		usleep(2500000);

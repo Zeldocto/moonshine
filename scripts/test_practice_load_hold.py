@@ -26,12 +26,24 @@ class LoadHoldTests(unittest.TestCase):
                 "bool actionableStage(", "bool activatePendingPause(",
                 "bool activatePendingLoadHold(", "void armLoadHold(",
                 "void cancelLoadHold(", "void onSavestateLoaded()",
-                "bool paused()", "bool manualPaused()",
+                "bool paused()", "bool manualPaused()", "bool nativePaused()", "bool resumingNativePause()",
                 "u32 hashBytes(", "bool validSceneKey(", "u32 transitionsThrough(", "bool atRecordedScene()", "void warnDesync(", "void stopTape(",
                 "bool suspendForScene(", "bool activateTimelineArrival(",
                 "void beforeDirect(", 'extern "C" s32 susamunePracticeChangeState(',
                 'extern "C" u32 susamunePracticeReadPad()', "void afterDirect(", "void beforeStageSetup()", "void afterStageSetup()",
                 "void releaseForDeparture()", "void requestStop()", "void pauseForCheckpoint()", "void pauseEditing()"))
+        main = (ROOT / "src/main.cpp").read_text(encoding="utf-8")
+        suppress = main.split("const bool suppressPad = ", 1)[1].split(";", 1)[0]
+        advance = main.rsplit("PracticeSession::afterDirect(state, ", 1)[1].split(");", 1)[0]
+        main_tick = r'''namespace PracticeSession {bool freeCamera(){return sFreeCamera;}bool resumingNativePause(){return ::resumingNativePause();}}
+extern "C" __declspec(dllexport) unsigned mainCameraTick(unsigned menuOwnsRetailPad,unsigned stateDiskBusy) {
+    beforeDirect(menuOwnsRetailPad!=0);const bool freeze=sFreeze;
+    const bool suppressPad=''' + suppress + r''';
+    afterDirect(1,''' + advance + r''');
+    return suppressPad|(sConsumedFrame<<1)|((unsigned)sMenuAction<<8);
+}
+extern "C" __declspec(dllexport) void pauseMenuState(unsigned state){pauseMenu.mState=state;}
+'''
         source = Path(cls.folder.name) / "load_hold.cpp"
         source.write_text(r'''
 #include "Dolphin/types.h"
@@ -44,9 +56,11 @@ struct TMarioGamePad {
     void updateMeaning() {++meaningCalls;}
 };
 static_assert(__builtin_offsetof(TMarioGamePad,_E8)==0xe8,"retail pad gate offset");
+struct TPauseMenu2 {enum {MENU_OPEN=1};unsigned mState;};
+static TPauseMenu2 pauseMenu;
 struct TMarDirector {
     enum { STATE_GAME_STARTING=2,STATE_NORMAL=4,STATE_PAUSE_MENU=5,STATE_STAGE_EXIT=9,STATE_STAGE_EXIT_2=12 };
-    u32 mCurState,mGameState,mDemoState;u8 _260;
+    u32 mCurState,mGameState,mDemoState;u8 _260;TPauseMenu2 *mPauseMenu;
 };
 struct TApplication { enum { CONTEXT_DIRECT_MAIN_LOOP=1,CONTEXT_DIRECT_STAGE=5,CONTEXT_DIRECT_MOVIE=6 };TMarioGamePad *mGamePads[1]; };
 struct Mario { u32 mState; };
@@ -112,6 +126,7 @@ TMarDirector *stageDirector(){return ready&&!movieContext?&director:nullptr;}
 TMovieDirector *movieDirector(){movie.mFlags=movieInitialized?1:0;return ready&&movieContext?&movie:nullptr;}
 Context context(){return !ready?Unavailable:movieContext?(movieInitialized?MovieReady:MovieLoading):director._260?StageReady:StageLoading;}
 }
+bool mem1(const void *p,unsigned){return p!=nullptr;}
 bool stageReady() {return ready&&!movieContext&&director._260;}
 bool observerTransition() {return transition;}
 bool assisted() {return sAssisted;}
@@ -123,6 +138,7 @@ void message(const char *text) {sStatus=text;}
 void invalidate() {++invalidations;sAssisted=true;}
 void restoreCamera() {}
 void updateCamera() {}
+void resetCameraMotion() {}
 void stopTape(const char *);
 void inject(const SusamunePracticeInput &input,TMarioGamePad *,u32 releases=0) {lastInjected=input.buttons;if(releases==0x1fffff)++neutralizations;}
 SusamunePracticeInput snapshot(const SusamunePracticeInput &input){return input;}
@@ -141,7 +157,7 @@ s32 retailChange(TMarDirector *d) {++retailCalls;d->mCurState=retailNext;return 
 static const size_t kChangeState=reinterpret_cast<size_t>(&retailChange);
 ''' + functions + r'''
 extern "C" __declspec(dllexport) void reset(unsigned state,unsigned modes) {
-    ready=true;transition=false;pad={};pad.flags=2;director={};director._260=1;director.mCurState=state;movieContext=movieInitialized=false;
+    ready=true;transition=false;pad={};pad.flags=2;director={};director._260=1;director.mCurState=state;director.mPauseMenu=&pauseMenu;pauseMenu.mState=1;movieContext=movieInitialized=false;
     sPhysical={};sConsumed={};JUTGamePad::mPadStatus[0]={};sPriorButtons=0;sPaused=modes&1;sOwnLoad=modes&2;
     sPausePending=sLoadHoldActive=sLoadHoldPending=sCameraWaitButtons=false;
     sFreeCamera=sStepQueued=sHaveRead=sConsumedFrame=sStepping=sModal=false;
@@ -166,6 +182,15 @@ extern "C" __declspec(dllexport) void physical(unsigned buttons,int error) {
 }
 extern "C" __declspec(dllexport) void loaded() {onSavestateLoaded();}
 extern "C" __declspec(dllexport) void before(unsigned modal) {beforeDirect(modal!=0);}
+extern "C" __declspec(dllexport) void cameraMode(unsigned paused,unsigned action,unsigned buttons) {
+    sFreeCamera=true;sPaused=paused!=0;sMenuAction=(u8)action;sHaveRead=true;sReadPad=&pad;
+    sPhysical.buttons=sConsumed.buttons=(u16)buttons;lastInjected=buttons;
+}
+extern "C" __declspec(dllexport) unsigned cameraStatus() {
+    return sFreeCamera|(sPaused<<1)|(sFreeze<<2)|(sStepping<<3)|
+        ((unsigned)sConsumed.buttons<<8)|(lastInjected<<20);
+}
+extern "C" __declspec(dllexport) void cameraOff(){sFreeCamera=false;}
 extern "C" __declspec(dllexport) void state(unsigned value) {director.mCurState=value;}
 extern "C" __declspec(dllexport) void gates(unsigned flags,int counter,unsigned game,unsigned demo) {
     pad.flags=(u16)flags;pad._E8=counter;director.mGameState=game;director.mDemoState=demo;
@@ -261,7 +286,7 @@ extern "C" __declspec(dllexport) void replayInput(unsigned hash) {
     liveFingerprint=hash;sFrameInjected=true;consume(0,0);
 }
 extern "C" __declspec(dllexport) const char*text(){return sStatus;}
-''', encoding="ascii")
+''' + main_tick, encoding="ascii")
         library = source.with_suffix(".dll")
         subprocess.run([str(compiler), "--target=x86_64-pc-windows-msvc", "-shared",
                         "-nostdlib", "-fuse-ld=lld", "-Wl,/noentry", "-O2",
@@ -283,6 +308,93 @@ extern "C" __declspec(dllexport) const char*text(){return sStatus;}
 
     def arrive_zone(self, scene=0x2F000001, fingerprint=123):
         self.lib.arrival(scene, fingerprint)
+
+    def test_camera_menu_resume_waits_for_A_then_retains_live_camera(self):
+        self.lib.reset(4, 0)
+        self.lib.cameraMode(1, 2, 0x100)
+        self.lib.before(0)
+        self.assertEqual(self.lib.cameraStatus(), 1 | 2 | 4)
+        self.lib.physical(0, 0)
+        self.lib.before(0)
+        self.assertEqual(self.lib.cameraStatus(), 1)
+        self.lib.before(0)
+        self.assertEqual(self.lib.cameraStatus(), 1)
+
+    def test_live_camera_records_neutral_gameplay_without_stealing_menu_input(self):
+        self.lib.reset(4, 0)
+        self.lib.cameraMode(0, 0, 0x300)
+        self.lib.before(1)
+        self.assertEqual(self.lib.cameraStatus(), 1 | (0x300 << 8) | (0x300 << 20))
+        self.lib.before(0)
+        self.assertEqual(self.lib.cameraStatus(), 1)
+
+    def test_live_camera_recording_consumes_neutral_frames_but_menu_and_disk_do_not(self):
+        self.lib.reset(4, 0)
+        self.lib.cameraMode(0, 0, 0x300)
+        self.lib.recordNow()
+        self.assertEqual(self.lib.mainCameraTick(0, 0), 3)
+        self.assertEqual(self.lib.timeline(0), 1)
+        self.assertEqual(self.lib.frameButtons(0), 0)
+        self.lib.mainCameraTick(1, 0)
+        self.lib.mainCameraTick(0, 1)
+        self.assertEqual(self.lib.timeline(0), 1)
+
+    def test_native_resume_waits_for_release_and_menu_then_records_only_one_native_B(self):
+        self.lib.reset(5, 0)
+        self.lib.cameraMode(0, 3, 0x100)
+        self.lib.recordNow()
+        self.assertEqual(self.lib.mainCameraTick(0, 0) & 1, 1)
+        self.lib.physical(0, 0)
+        self.lib.pauseMenuState(0)
+        self.assertEqual(self.lib.mainCameraTick(0, 0) & 1, 1)
+        self.lib.pauseMenuState(1)
+        self.assertEqual(self.lib.mainCameraTick(0, 0), 2)
+        self.assertEqual(self.lib.frameButtons(2), 0x200)
+        self.lib.state(4)
+        self.assertEqual(self.lib.mainCameraTick(0, 0), 3)
+        self.assertEqual(self.lib.frameButtons(3), 0)
+
+    def test_native_resume_retries_after_disk_hold_and_never_leaks_on_departure(self):
+        self.lib.reset(5, 0)
+        self.lib.cameraMode(0, 3, 0)
+        self.assertEqual(self.lib.mainCameraTick(0, 1), 1 | (3 << 8))
+        self.assertEqual(self.lib.mainCameraTick(0, 0), 2)
+        self.lib.cameraMode(0, 3, 0)
+        self.lib.state(9)
+        self.lib.before(0)
+        self.assertEqual(self.lib.cameraStatus(), 0)
+
+    def test_native_resume_cancels_if_native_pause_or_camera_disappears(self):
+        for camera_off in (False, True):
+            self.lib.reset(5, 0)
+            self.lib.cameraMode(0, 3, 0)
+            if camera_off:
+                self.lib.cameraOff()
+            else:
+                self.lib.state(4)
+            result = self.lib.mainCameraTick(0, 0)
+            self.assertEqual(result >> 8, 0)
+            self.assertEqual(self.lib.timeline(21), 0)
+
+    def test_paused_camera_still_steps_once_and_load_hold_still_wins(self):
+        self.lib.reset(4, 0)
+        self.lib.cameraMode(1, 0, 0x100)
+        self.lib.step()
+        self.lib.before(0)
+        self.assertEqual(self.lib.cameraStatus(), 1 | 2 | 8)
+        self.lib.before(0)
+        self.assertEqual(self.lib.cameraStatus(), 1 | 2 | 4)
+        self.start(buttons=2)
+        self.lib.cameraMode(0, 0, 2)
+        self.lib.before(0)
+        self.assertEqual(self.lib.cameraStatus(), 1 | 4)
+
+    def test_camera_still_detaches_when_leaving_loaded_gameplay(self):
+        self.lib.reset(4, 0)
+        self.lib.cameraMode(0, 0, 0)
+        self.lib.state(9)
+        self.lib.before(0)
+        self.assertEqual(self.lib.cameraStatus(), 0)
 
     def test_zone_entry_input_recorded_before_loading_suspends_tape(self):
         self.lib.reset(4, 0); self.lib.depart(1)

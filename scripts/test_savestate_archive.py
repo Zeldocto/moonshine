@@ -19,6 +19,7 @@ FIXTURE = r'''
 #include "susamune/state_pool_memory.h"
 #include "susamune/state_codec.hxx"
 #include "susamune/state_crc.hxx"
+#include "susamune/state_live_video.hxx"
 typedef unsigned int u32;typedef unsigned char u8;typedef long long OSTime;
 extern "C" void *memcpy(void*d,const void*s,__SIZE_TYPE__ n){u8*a=(u8*)d;const u8*b=(const u8*)s;while(n--)*a++=*b++;return d;}
 extern "C" void *memset(void*d,int c,__SIZE_TYPE__ n){u8*a=(u8*)d;while(n--)*a++=(u8)c;return d;}
@@ -70,6 +71,7 @@ namespace PracticeSession{enum{kSavestateSpanCount=0};static bool copySavestateB
 namespace Ghost{enum{kSavestateSpanCount=0};}
 namespace StateArchiveProfile{static void copyGameBytes(void*,void*d,const void*s,u32 n){policyBytes+=n;memcpy(d,s,n);}}
 static u32 sLiveArchiveProfile;
+static StateLiveVideo::Range sLiveVideo = {};
 static StateCodec::Status fullDecode(void*w,u32 n,const StateCodec::ReadSpan*s,u32 count,
  const StateCodec::WriteSpan*d,u32 dn,u32 raw,u32 adler,StateCodec::CopyBytes copy,void*ctx){
  ++fullDecodes;return StateCodec::decompress(w,n,s,count,d,dn,raw,adler,copy,ctx);}
@@ -176,7 +178,8 @@ class SavestateArchiveTests(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         source=FIXTURE+'\nnamespace PracticeSession {\n'+function_source(ROOT/'src/practice_session.cpp','bool projectSavestateMatches(')+'\n}\n'
         for name in ('void poolWriteSpans(', 'void poolReadSpans(', 'u32 packedChecksum(',
-                     'bool archiveStageReady()', 'bool admitArchiveStage()', 'void copyStateBytes(',
+                     'bool archiveStageReady()', 'bool admitArchiveStage()',
+                     'void copyOwnedStateBytes(', 'void copyStateBytes(',
                      'bool SavestateManager::diskBusy()', 'void SavestateManager::updateDisk()',
                      'bool SavestateManager::takeTransferResult('):
             source+=function_source(SOURCE,name)

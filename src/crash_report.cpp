@@ -10,7 +10,7 @@
 #include "susamune/mod_bin.h"
 
 #ifndef MOONSHINE_CRASH_BUILD
-#define MOONSHINE_CRASH_BUILD "Moonshine V2.3.0 Frame By Frame"
+#define MOONSHINE_CRASH_BUILD "Moonshine V2.3.1 Frame By Frame"
 #endif
 
 extern "C" void setJutPreUserCallback(JUTException::UserCallback)
@@ -295,7 +295,7 @@ void printPhotoReport(u16 exception, OSContext *context, u32 dsisr, u32 dar) {
     // Retail calls this with a live console after its exception pages.
     // Keep the core independent: optional rendering may itself be damaged.
     jutConsolePrint(jutExceptionConsole,
-        "\nMOONSHINE V2.3.0 FRAME BY FRAME\n"
+        "\nMOONSHINE V2.3.1 FRAME BY FRAME\n"
         "REPORT %08X-%08X\n%s  MOD %08X\n"
         "EXCEPTION %u  CONTEXT %u\n"
         "PC %08X  LR %08X\nSP %08X  DAR %08X\n"

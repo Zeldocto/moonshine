@@ -36,12 +36,14 @@ int snprintf(char*out,size_t n,const char*fmt,...){
  for(unsigned i=0;i<count;i++){if(written+1<n)out[written]=s[i];written++;}}
  __builtin_va_end(ap);if(n)out[written<n?written:n-1]=0;return written;
 }
-static int status,calls,ensureMode,attributes,secondStatus,secondAttributes,mkdirStatus,mkdirCalls;
+static int markerReady=1,status,calls,ensureMode,attributes,secondStatus,secondAttributes,mkdirStatus,mkdirCalls;
 static char recorded[512],created[512];
 int f_stat_char(const char*path,FILINFO*info){unsigned i=0;do{recorded[i]=path[i];}while(path[i++]);calls++;info->fsize=123;
+ if(!ensureMode){const char*s=path;while(*s)s++;if(s-path>=10&&strcmp(s-10,".layout-v1")==0)return markerReady?0:4;}
  info->fattrib=ensureMode&&calls>1?secondAttributes:attributes;return ensureMode&&calls>1?secondStatus:status;}
 int f_mkdir_char(const char*path){unsigned i=0;do{created[i]=path[i];}while(path[i++]);mkdirCalls++;return mkdirStatus;}
 '''
+        code += (ROOT / "include/susamune/data_paths.h").read_text()
         code += function(production, "SusamuneThemeFindFile")
         code += function(production, "SusamuneThemeEnsureDirectory")
         code += r'''
@@ -53,6 +55,7 @@ __declspec(dllexport) int ensure(const char*device,int initial,int attr,int crea
  ensureMode=1;status=initial;attributes=attr;secondStatus=after;secondAttributes=afterAttr;mkdirStatus=createResult;
  calls=mkdirCalls=0;recorded[0]=created[0]=0;return SusamuneThemeEnsureDirectory(device);
 }
+__declspec(dllexport) void migrated(int ready){markerReady=ready;}
 __declspec(dllexport) int creations(void){return mkdirCalls;}
 __declspec(dllexport) const char*createdPath(void){return created;}
 __declspec(dllexport) const char*path(void){return recorded;}
@@ -77,14 +80,14 @@ __declspec(dllexport) int count(void){return calls;}
             for leaf in (b"background.png", b"bgm.mp3"):
                 with self.subTest(device=device, leaf=leaf):
                     self.assertEqual(self.lib.locate(device, leaf, 512, 0), 0)
-                    self.assertEqual(self.lib.path(), device + b":/Moonshine_Theme/" + leaf)
+                    self.assertEqual(self.lib.path(), device + b":/Moonshine data/theme/" + leaf)
                     self.assertEqual(self.lib.count(), 1)
 
     def test_missing_or_broken_root_asset_never_searches_old_folder(self):
         for error in (1, 4, 5, 7):
             self.assertEqual(self.lib.locate(b"sd", b"bgm.mp3", 512, error), error)
-            self.assertEqual(self.lib.path(), b"sd:/Moonshine_Theme/bgm.mp3")
-            self.assertEqual(self.lib.count(), 1)
+            self.assertEqual(self.lib.path(), b"sd:/Moonshine data/.layout-v1" if error in (4, 5) else b"sd:/Moonshine data/theme/bgm.mp3")
+            self.assertEqual(self.lib.count(), 2 if error in (4, 5) else 1)
 
     def test_invalid_device_leaf_and_short_buffer_do_not_access_storage(self):
         for device, leaf, capacity in ((None, b"bgm.mp3", 512), (b"usb:/", b"bgm.mp3", 512),
@@ -96,7 +99,7 @@ __declspec(dllexport) int count(void){return calls;}
     def test_existing_theme_directory_needs_no_write(self):
         for device in (b"sd", b"usb"):
             self.assertEqual(self.lib.ensure(device, 0, 16, 7, 0, 16), 0)
-            self.assertEqual(self.lib.path(), device + b":/Moonshine_Theme")
+            self.assertEqual(self.lib.path(), device + b":/Moonshine data/theme")
             self.assertEqual(self.lib.count(), 1)
             self.assertEqual(self.lib.creations(), 0)
 
@@ -104,7 +107,7 @@ __declspec(dllexport) int count(void){return calls;}
         for device in (b"sd", b"usb"):
             for missing in (4, 5):
                 self.assertEqual(self.lib.ensure(device, missing, 0, 0, 0, 16), 0)
-                self.assertEqual(self.lib.createdPath(), device + b":/Moonshine_Theme")
+                self.assertEqual(self.lib.createdPath(), device + b":/Moonshine data/theme")
                 self.assertEqual(self.lib.count(), 1)
                 self.assertEqual(self.lib.creations(), 1)
 
@@ -123,6 +126,18 @@ __declspec(dllexport) int count(void){return calls;}
         self.assertEqual(self.lib.ensure(b"sd", 4, 0, 8, 0, 0), 8)
         self.assertEqual(self.lib.ensure(b"sd", 4, 0, 8, 1, 0), 1)
 
+    def test_first_boot_can_read_old_theme_before_migration_without_creating_it(self):
+        self.lib.migrated(0)
+        try:
+            self.assertEqual(self.lib.locate(b"sd", b"background.png", 512, 4), 4)
+            self.assertEqual(self.lib.path(), b"sd:/Moonshine_Theme/background.png")
+            self.assertEqual(self.lib.count(), 3)
+            self.assertEqual(self.lib.locate(b"usb", b"bgm.mp3", 512, 0), 0)
+            self.assertEqual(self.lib.path(), b"usb:/Moonshine data/theme/bgm.mp3")
+            self.assertEqual(self.lib.count(), 1)
+        finally:
+            self.lib.migrated(1)
+
     def test_invalid_creation_device_never_touches_storage(self):
         for device in (None, b"", b"SD", b"usb:/", b"../sd"):
             self.assertEqual(self.lib.ensure(device, 4, 0, 0, 0, 16), 6)
@@ -135,7 +150,7 @@ __declspec(dllexport) int count(void){return calls;}
         self.assertNotIn("SusamuneThemeEnsureDirectory", preload)
         self.assertEqual(main.count("SusamuneThemeEnsureDirectory("), 1)
         mounted = main.index('if (!devices[DEV_SD] && !devices[DEV_USB])')
-        ensure = main.index('FRESULT themeDirectory = SusamuneThemeEnsureDirectory(')
+        ensure = main.index('themeDirectory = SusamuneThemeEnsureDirectory(')
         load = main.index('if (!themeLoaded)', ensure)
         self.assertLess(mounted, ensure)
         self.assertLess(ensure, load)

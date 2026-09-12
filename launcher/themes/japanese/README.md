@@ -1,6 +1,6 @@
 # Japanese download background
 
-The Japanese download includes `background.png` in `/Moonshine_Theme` at the
+The Japanese download includes `background.png` in `/Moonshine data/theme` at the
 SD root. The standard download does not replace an existing background or music.
 The launcher does not switch themes when the selected game version changes.
 

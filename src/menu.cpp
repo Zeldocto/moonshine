@@ -5837,12 +5837,12 @@ public:
         return "Free camera";
     }
     const char *summary() const override {
-        return "Move the camera while gameplay or a ghost is paused.";
+        return "Move the camera with gameplay paused or running.";
     }
     void focus() override { mInput.begin(JUTGamePad::A | JUTGamePad::X); }
     bool grabsInput() const override { return mBinding || gBinds.recording(); }
     bool suppressesBinds() const override { return true; }
-    bool favoriteHint() const override { return mSel >= 2 && mSel <= 5; }
+    bool favoriteHint() const override { return mSel >= 2 && mSel <= 6; }
     void update(Menu *menu, TMarioGamePad *pad) override {
         const u32 nav = menu->navigationInput(pad);
         if (mBinding || gBinds.recording()) {
@@ -5856,7 +5856,7 @@ public:
         }
         if (nav & TMarioGamePad::CSTICK_UP) mSel = (u8)wrap(mSel - 1, rowCount());
         if (nav & TMarioGamePad::CSTICK_DOWN) mSel = (u8)wrap(mSel + 1, rowCount());
-        if (mSel >= 2 && mSel <= 5 &&
+        if (favoriteHint() &&
             (nav & (TMarioGamePad::CSTICK_LEFT | TMarioGamePad::CSTICK_RIGHT)))
             gSettings.cycle(cameraSetting(mSel),
                 (nav & TMarioGamePad::CSTICK_LEFT) ? -1 : 1);
@@ -5875,35 +5875,36 @@ public:
             return;
         }
         if (!(pressed & JUTGamePad::A)) return;
+        if (favoriteHint()) {
+            gSettings.cycle(cameraSetting(mSel), 1);
+            return;
+        }
         bool close = false;
         switch (mSel) {
         case 0: close = PracticeSession::requestFreeCameraToggle(); break;
         case 1: close = PracticeSession::requestPauseToggle(true); break;
-        case 2: gSettings.cycle(SETTING_FREE_CAMERA_SPEED, 1); return;
-        case 3: gSettings.cycle(SETTING_FREE_CAMERA_STRAFE_REVERSE, 1); return;
-        case 4: gSettings.cycle(SETTING_FREE_CAMERA_SENSITIVITY, 1); return;
-        case 5: gSettings.cycle(SETTING_FREE_CAMERA_HIDE_HUD, 1); return;
-        case 6: PracticeSession::recenterCamera(); break;
+        case 7: PracticeSession::recenterCamera(); break;
         }
         if (close) menu->hide();
         menu->toast(PracticeSession::status());
     }
     void draw(Menu *menu, int x, int y, int w, int h) override {
         const char *pause = PracticeSession::pausePending() ? "Cancel armed pause" :
-            PracticeSession::manualPaused() ? "Resume gameplay" : "Pause gameplay";
+            (PracticeSession::manualPaused() || (PracticeSession::freeCamera() && PracticeSession::nativePaused())) ? "Resume gameplay" : "Pause gameplay";
         const char *cameraLabels[] = {"Free camera", pause, "Movement speed", "Reverse sideways",
-                                     "Look sensitivity", "Hide all HUD", "Recenter camera"};
+                                     "Look sensitivity", "Hide all HUD", "Camera smoothing", "Recenter camera"};
         const char *cameraValues[] = {PracticeSession::freeCamera() ? "On" : "Off", "",
             gSettings.valueLabel(SETTING_FREE_CAMERA_SPEED),
             gSettings.valueLabel(SETTING_FREE_CAMERA_STRAFE_REVERSE),
             gSettings.valueLabel(SETTING_FREE_CAMERA_SENSITIVITY),
-            gSettings.valueLabel(SETTING_FREE_CAMERA_HIDE_HUD), "Reset view"};
+            gSettings.valueLabel(SETTING_FREE_CAMERA_HIDE_HUD),
+            gSettings.valueLabel(SETTING_FREE_CAMERA_SMOOTHING), "Reset view"};
         const char *const *labels = cameraLabels;
         const char *const *values = cameraValues;
         char status[80];
             snprintf(status, sizeof(status), "Game: %s   Camera: %s",
                 PracticeSession::holdingLoad() ? "Held" : PracticeSession::pausePending() ? "Armed" :
-                PracticeSession::manualPaused() ? "Paused" : "Live",
+                (PracticeSession::manualPaused() || PracticeSession::nativePaused()) ? "Paused" : "Live",
                 PracticeSession::freeCamera() ? "On" : "Off");
         menu->drawText(status, x + 4, y, 14, 14, cValue());
         const int listY = y + ROW_H;
@@ -5912,7 +5913,7 @@ public:
         const int end = clampi(start + listH / ROW_H, 0, rowCount());
         for (int i = start; i < end; ++i)
             drawValueRow(menu, x, listY + (i - start) * ROW_H, w, labels[i], values[i], i == mSel,
-                i >= 2 && i <= 5 && gSettings.favorite(cameraSetting(i)), true);
+                i >= 2 && i <= 6 && gSettings.favorite(cameraSetting(i)), true);
         drawScrollHints(menu, x, listY, w, listH, start, end, rowCount());
         const BindId bind = selectedBind();
         if (bind != BIND_COUNT) {
@@ -5928,22 +5929,23 @@ private:
     static SettingId cameraSetting(int row) {
         static const SettingId ids[] = {SETTING_FREE_CAMERA_SPEED,
             SETTING_FREE_CAMERA_STRAFE_REVERSE, SETTING_FREE_CAMERA_SENSITIVITY,
-            SETTING_FREE_CAMERA_HIDE_HUD};
+            SETTING_FREE_CAMERA_HIDE_HUD, SETTING_FREE_CAMERA_SMOOTHING};
         return ids[row - 2];
     }
-    int rowCount() const { return 7; }
+    int rowCount() const { return 8; }
     BindId selectedBind() const {
         static const BindId camera[] = {BIND_FREE_CAMERA, BIND_PRACTICE_PAUSE, BIND_COUNT,
-            BIND_COUNT, BIND_COUNT, BIND_COUNT, BIND_COUNT};
+            BIND_COUNT, BIND_COUNT, BIND_COUNT, BIND_COUNT, BIND_COUNT};
         return camera[mSel];
     }
     const char *help() const {
-        if (mSel == 0) return "On pauses live gameplay. Off leaves it paused; choose Resume when ready.";
-        if (mSel == 1) return "Resume closes free camera in gameplay. Ghost Watch can keep its camera.";
+        if (mSel == 0) return "On pauses gameplay. Off restores the game camera without changing pause.";
+        if (mSel == 1) return "Resume runs the game at normal speed and keeps free camera on.";
         if (mSel == 2) return "C-stick left/right changes speed. Hold X while moving for a boost.";
         if (mSel == 3) return "Reverse only main-stick sideways movement. C-stick looking stays unchanged.";
         if (mSel == 4) return "Change how quickly the C-stick turns the camera, from 0.25x to 4x.";
         if (mSel == 5) return "Hide game and Moonshine overlays while filming. You can still open this menu.";
+        if (mSel == 6) return "Ease moving and turning starts/stops. Off responds immediately.";
         return "Restore the game's viewpoint. Main stick: move; C-stick: look; L/R: height.";
     }
     u8 mSel;
@@ -5975,7 +5977,7 @@ public:
             {"FREE CAMERA", "Practice: Free camera pauses and explores.",
              "Main stick moves; C-stick turns the camera.", "L and R change height. Hold X for a boost.",
              "Movement speed changes how fast you travel.", "Look sensitivity changes how fast you turn.",
-             "Hide all HUD removes overlays for filming.", "Turn camera Off, then Resume to play."},
+             "Hide all HUD removes overlays for filming.", "Resume keeps the free camera running."},
             {"TAS PROJECTS", "Practice: TAS projects, then New TAS.", "The beginning is captured automatically.",
              "Continue edits while paused; Step or Resume.", "Checkpoints save places to return to.",
              "Save TAS keeps everything together on SD.", "Open TAS keeps the full saved recording.", "Replay warns if game state differs, and continues."},
@@ -5986,8 +5988,8 @@ public:
             {"LAYOUT EDITOR", "Display: Layout editor, then choose a group.",
              "Timers includes the full Sunshine timer editor.", "Native HUD colours includes health and air.",
              "Metadata: field gap, row gap, columns, width.", "Practice feedback: wallkick, rollout and dust.",
-             "Hold Y while adjusting RGB for steps of 1.", "A: keep. B: discard. Z: reset selected option."},
-            {"FRAME BY FRAME", "Moonshine V2.3.0 Frame By Frame", "Find Timer and splits in Runs or Display.",
+             "Hold Y while adjusting HSL for steps of 1.", "A: keep. B: discard. Z: reset selected option."},
+            {"FRAME BY FRAME", "Moonshine V2.3.1 Frame By Frame", "Find Timer and splits in Runs or Display.",
              "Split comparison: Off, PB, SOB or Ghost.", "Report any missing or incorrect checkpoints.",
              "Full English and Japanese guides are in the ZIP.", "Keep crash reports when reporting a problem.", "Settings and records survive updates."},
         };
@@ -6779,7 +6781,7 @@ void Menu::draw(J2DOrthoGraph *ortho) {
     // Title + accent underline.
     drawText("Moonshine", PANEL_X + PAD - 2, PANEL_Y + 12,
              TITLE_SZ, TITLE_SZ, cTitle());
-    drawText("V2.3.0 Frame By Frame", PANEL_X + PANEL_W - PAD - textWidth("V2.3.0 Frame By Frame", FOOT_SZ),
+    drawText("V2.3.1 Frame By Frame", PANEL_X + PANEL_W - PAD - textWidth("V2.3.1 Frame By Frame", FOOT_SZ),
              PANEL_Y + 21, FOOT_SZ, FOOT_SZ, col(255, 196, 90, 255));
     fillBox(PANEL_X + PAD, PANEL_Y + 12 + TITLE_SZ + 1, 260, 2, cAccent());
 

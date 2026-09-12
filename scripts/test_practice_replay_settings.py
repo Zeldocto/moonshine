@@ -70,7 +70,8 @@ extern "C" __declspec(dllexport) void rate(float value){cadence=value;}
             f"SETTING_FAVORITES_EXTRA_{i}" for i in range(8)} | {
             "SETTING_RNG_FAVORITES", "SETTING_NATIVE_TIMER_X", "SETTING_NATIVE_TIMER_Y",
             "SETTING_NATIVE_TIMER_SCALE", "SETTING_FREE_CAMERA_SPEED",
-            "SETTING_FREE_CAMERA_SENSITIVITY", "SETTING_FREE_CAMERA_HIDE_HUD",
+            "SETTING_FREE_CAMERA_SENSITIVITY",
+            "SETTING_FREE_CAMERA_SMOOTHING", "SETTING_FREE_CAMERA_HIDE_HUD",
             "SETTING_FREE_CAMERA_STRAFE_REVERSE", "SETTING_METADATA_HORIZONTAL",
             "SETTING_GHOST_INPUTS", "SETTING_TAS_BANNER"}
         actual = {name for i, name in enumerate(self.ids) if self.lib.excluded(i)}

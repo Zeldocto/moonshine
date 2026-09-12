@@ -9,6 +9,7 @@ typedef _Bool bool;
 #define false 0
 #define NULL ((void*)0)
 #include "susamune/ghost_storage.h"
+#include "susamune/data_paths.h"
 #include "susamune/mod_bin.h"
 typedef unsigned char u8;
 typedef signed char s8;
@@ -110,7 +111,8 @@ static int f_readdir(DIR *dir,FILINFO *info) {
  }
  return FR_OK;
 }
-static const char *SusamuneCfgStoragePrefix(void) { return ""; }
+static const char *testStoragePrefix=MOONSHINE_DATA_ROOT;
+static const char *SusamuneCfgStoragePrefix(void) { return testStoragePrefix; }
 static bool SusamuneCfgStorageAvailable(void) { return true; }
 static void sync_before_read(void *ptr,u32 size) { (void)ptr; (void)size; }
 static void sync_after_write(void *ptr,u32 size) { (void)ptr; (void)size; }

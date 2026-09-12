@@ -20,6 +20,7 @@ FIXTURE = r'''
 #include "susamune/state_pool_memory.h"
 #include "susamune/state_codec.hxx"
 #include "susamune/state_crc.hxx"
+#include "susamune/state_live_video.hxx"
 typedef unsigned int u32;typedef unsigned char u8;typedef long long OSTime;
 extern "C" void *memcpy(void*d,const void*s,__SIZE_TYPE__ n){u8*a=(u8*)d;const u8*b=(const u8*)s;while(n--)*a++=*b++;return d;}
 extern "C" void *memset(void*d,int c,__SIZE_TYPE__ n){u8*a=(u8*)d;while(n--)*a++=(u8)c;return d;}
@@ -46,6 +47,7 @@ static SusamuneStateArchiveHeader sStreamHeader;
 static u32 sPackedChecksums[3],sLoadSlot,sStreamSeen,sStreamOffset,sStreamSize,sStreamCrc,sStreamId;
 static u32 sStreamChecksums[32],sLiveArchiveProfile,sDiskPoolUsed,sDurableSlots;
 static bool sStreamCommit,sDiskStream,sDiskRecovered;
+static StateLiveVideo::Range sLiveVideo = {};
 static u32 rawSize,reads,writes,cancelled,errorText,ownerFault,regionFault,transportFault,faultOffset;
 static const u8 *archiveBytes;static u32 archiveSize;
 static u32 clockValue;
@@ -111,9 +113,11 @@ __declspec(dllexport) void reset(const StateCodec::ReadSpan*slots,const u32*adle
  StateStorage::pending=StateStorage::ready=false;
  gpApplication.mCurrentScene={1,2};reads=writes=cancelled=errorText=ownerFault=regionFault=transportFault=clockValue=0;
  faultOffset=8192;
- PracticeSession::ownReplay=false;
+ PracticeSession::ownReplay=false;sLiveVideo={0,0};
 }
 __declspec(dllexport) void replay(){PracticeSession::ownReplay=true;}
+__declspec(dllexport) void protectVideo(u32 offset,u32 size){
+ sLiveVideo={(__UINTPTR_TYPE__)(live+32+offset),(__UINTPTR_TYPE__)(live+32+offset+size)};}
 __declspec(dllexport) void fault(u32 kind,u32 offset){transportFault=kind;faultOffset=offset;}
 __declspec(dllexport) void change(u32 kind){
  if(kind==1)for(u32 i=0;i<3;++i)++sSlots[i].archiveProfile;
@@ -143,7 +147,8 @@ class SavestateStreamingTests(unittest.TestCase):
         cls.addClassCleanup(cls.temp.cleanup)
         text = FIXTURE
         for name in ('void poolWriteSpans(', 'void poolReadSpans(', 'u32 packedChecksum(',
-                     'bool waitStateWindow(', 'bool readStateWindow(', 'void copyStateBytes('):
+                     'bool waitStateWindow(', 'bool readStateWindow(',
+                     'void copyOwnedStateBytes(', 'void copyStateBytes('):
             text += function_source(SOURCE, name)
         production = SOURCE.read_text()
         text += production[production.index('struct SDRecovery {'):production.index('bool prepareSDRecovery(')]
@@ -255,6 +260,21 @@ extern "C" __declspec(dllexport) u32 restore(){
                 self.assertEqual(self.output(), expected[:-276] + b'\xe3' * 276)
                 self.assertEqual(self.lib.value(0), int(fail))
                 self.preserved()
+
+    def test_live_video_survives_streamed_load_and_ram_recovery_in_both_formats(self):
+        first, size = 4090, 9000
+        for quick in (False, True):
+            for fail in (False, True):
+                with self.subTest(quick=quick, recovery=fail):
+                    self.setup_state(quick)
+                    self.lib.protectVideo(first, size)
+                    if fail:
+                        self.lib.fault(1, 65536)
+                    self.assertEqual(self.lib.restore(), 0)
+                    expected = self.old_raw[1] if fail else self.raw
+                    self.assertEqual(self.output(), expected[:first] + b'\xe3' * size + expected[first+size:])
+                    self.assertEqual(self.lib.value(0), int(fail))
+                    self.preserved()
 
 
 if __name__ == '__main__':unittest.main()

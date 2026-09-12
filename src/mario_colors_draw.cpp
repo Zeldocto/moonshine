@@ -1,5 +1,6 @@
 #include "susamune/mario_colors.hxx"
 #include "susamune/mario_color_texture.hxx"
+#include "susamune/retail_input.hxx"
 
 #include "Dolphin/GX.h"
 #include "Dolphin/mem.h"
@@ -55,8 +56,8 @@ bool mem1(const void *pointer, u32 size) {
 }
 
 bool live() {
-    return gpApplication.mContext == TApplication::CONTEXT_DIRECT_STAGE &&
-        gpMarDirector && gpMarDirector == sDraw.director &&
+    return gpMarDirector && RetailInput::stageDirector() == gpMarDirector &&
+        gpMarDirector == sDraw.director &&
         gpMarDirector->_260 &&
         gpMarDirector->mCurState >= TMarDirector::STATE_GAME_STARTING &&
         gpMarioAddress && gpMarioAddress == sDraw.mario;

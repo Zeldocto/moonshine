@@ -40,6 +40,7 @@ class MarioColorTests(unittest.TestCase):
         prelude = r'''
 #include "susamune/susamune_cfg.h"
 #include "susamune/creation.hxx"
+#include "susamune/creation_color.hxx"
 #include "susamune/mario_colors.hxx"
 #include "susamune/fludd_colors.hxx"
 #define API extern "C" __declspec(dllexport)
@@ -56,7 +57,7 @@ class Menu {public:u32 navigationInput(TMarioGamePad*p){return p->mButtons.mRapi
  void toast(const char*){}void factoryReset(){} };
 void CreationEditor::draw(Menu*,const char*,const char*)const{}
 '''
-        code = prelude + raw
+        code = prelude + raw + re.sub(r"^#include[^\n]*", "", (ROOT / "src/creation_color.cpp").read_text(), flags=re.M)
         code += creation[creation.index("enum EditOption"):creation.index("inline int clampi")]
         code += function(creation, "clampi")
         code += "namespace LayoutEditor {" + function(layout, "updatePositionScale") + "}\n"
@@ -77,6 +78,8 @@ void sample(u16 raw=0,u32 held=0,u32 rapid=0) {
 }
 void click(u16 button) {sample();sample(button);sample();}
 void nav(u32 direction) {sample();sample(0,direction);sample();}
+void lightness(){for(int i=0;i<3;i++)nav(JUTGamePad::CSTICK_DOWN);}
+void appearance(){for(int i=0;i<3;i++)nav(JUTGamePad::CSTICK_UP);}
 void finish(bool keep) {click(keep?JUTGamePad::A:JUTGamePad::B);click(JUTGamePad::A);}
 void initialize() {JUTGamePad::mPadStatus[0].mButton=0;pad={};MarioColors::resetDefaults();}
 unsigned mask(){unsigned result=0;for(unsigned i=0;i<7;i++)if(MarioColors::enabled(i))result|=1u<<i;return result;}
@@ -102,22 +105,22 @@ API int editor(int scenario) {
  if(scenario==1){
   nav(JUTGamePad::CSTICK_RIGHT);if(mask()!=0x7f)return 11;
   click(JUTGamePad::START);nav(JUTGamePad::CSTICK_LEFT);if(mask()!=0x7e)return 12;
-  nav(JUTGamePad::CSTICK_DOWN);nav(JUTGamePad::CSTICK_LEFT);
-  if(mask()!=0x7f||MarioColors::rgb(0)[0]!=251||MarioColors::rgb(1)[0]!=255)return 13;
+  lightness();nav(JUTGamePad::CSTICK_LEFT);
+  if(mask()!=0x7f||MarioColors::rgb(0)[0]!=245||MarioColors::rgb(1)[0]!=255)return 13;
   sample(0,JUTGamePad::Y|JUTGamePad::CSTICK_LEFT);sample();
-  if(MarioColors::rgb(0)[0]!=250)return 14;
-  nav(JUTGamePad::CSTICK_UP);nav(JUTGamePad::CSTICK_LEFT);
-  if(mask()!=0x7e||MarioColors::rgb(0)[0]!=250)return 15;
+  if(MarioColors::rgb(0)[0]!=242)return 14;
+  appearance();nav(JUTGamePad::CSTICK_LEFT);
+  if(mask()!=0x7e||MarioColors::rgb(0)[0]!=242)return 15;
   nav(JUTGamePad::CSTICK_RIGHT);click(JUTGamePad::Z);click(JUTGamePad::A);
-  if(mask()!=0x7e||MarioColors::rgb(0)[0]!=250)return 16;
-  nav(JUTGamePad::CSTICK_DOWN);click(JUTGamePad::Z);click(JUTGamePad::A);
+  if(mask()!=0x7e||MarioColors::rgb(0)[0]!=242)return 16;
+  lightness();click(JUTGamePad::Z);click(JUTGamePad::A);
   if(mask()!=0x7f||MarioColors::rgb(0)[0]!=255)return 17;
   finish(true);return !MarioColors::editing()&&MarioColors::dirty()?0:18;
  }
  if(scenario==2){
-  nav(JUTGamePad::CSTICK_DOWN);nav(JUTGamePad::CSTICK_LEFT);
+  lightness();nav(JUTGamePad::CSTICK_LEFT);
   if(mask()!=0x7f||MarioColors::dirty())return 19;
-  for(unsigned i=0;i<7;i++)if(MarioColors::rgb(i)[0]!=251)return 20;
+  for(unsigned i=0;i<7;i++)if(MarioColors::rgb(i)[0]!=245)return 20;
   finish(false);if(mask()||MarioColors::dirty()||MarioColors::editing())return 21;
   for(unsigned i=0;i<7;i++)if(MarioColors::rgb(i)[0]!=255)return 22;
   MarioColors::beginEditor();nav(JUTGamePad::CSTICK_RIGHT);finish(true);
@@ -128,15 +131,15 @@ API int editor(int scenario) {
  }
  if(scenario==3){
   for(unsigned i=1;i<=7;i++){
-   click(JUTGamePad::START);nav(JUTGamePad::CSTICK_DOWN);nav(JUTGamePad::CSTICK_LEFT);
+   click(JUTGamePad::START);lightness();nav(JUTGamePad::CSTICK_LEFT);
    if(mask()!=((1u<<i)-1))return 26;
-   for(unsigned j=0;j<7;j++)if(MarioColors::rgb(j)[0]!=(j<i?251:255))return 27;
-   nav(JUTGamePad::CSTICK_UP);
+   for(unsigned j=0;j<7;j++)if(MarioColors::rgb(j)[0]!=(j<i?245:255))return 27;
+   appearance();
   }
   click(JUTGamePad::START);nav(JUTGamePad::CSTICK_LEFT);if(mask())return 28;
   finish(true);SusamuneMarioColorsCfg cfg={};MarioColors::stageInto(&cfg);MarioColors::resetDefaults();MarioColors::adopt(&cfg);
   if(mask())return 29;
-  for(unsigned i=0;i<7;i++)if(MarioColors::rgb(i)[0]!=251)return 30;
+  for(unsigned i=0;i<7;i++)if(MarioColors::rgb(i)[0]!=245)return 30;
   MarioColors::beginEditor();nav(JUTGamePad::CSTICK_RIGHT);finish(true);return mask()==0x7f?0:31;
  }
  return 99;
@@ -156,19 +159,19 @@ API int heldConfirmation(){
  sample();return !MarioColors::editing()&&MarioColors::dirty()?0:6;
 }
 API int saveDuringPreview(int keep){
- initialize();MarioColors::beginEditor();nav(JUTGamePad::CSTICK_DOWN);nav(JUTGamePad::CSTICK_LEFT);finish(true);
+ initialize();MarioColors::beginEditor();lightness();nav(JUTGamePad::CSTICK_LEFT);finish(true);
  if(!MarioColors::dirty()||mask()!=0x7f)return 1;
  MarioColors::beginEditor();nav(JUTGamePad::CSTICK_LEFT);
  if(!MarioColors::dirty()||mask())return 2;
- nav(JUTGamePad::CSTICK_DOWN);nav(JUTGamePad::CSTICK_LEFT);
- if(MarioColors::rgb(0)[0]!=247)return 3;
+ lightness();nav(JUTGamePad::CSTICK_LEFT);
+ if(MarioColors::rgb(0)[0]!=235)return 3;
  SusamuneMarioColorsCfg cfg={};MarioColors::stageInto(&cfg);MarioColors::clearDirty();
- if(cfg.enabled!=0x7f||cfg.rgb[0][0]!=251||MarioColors::dirty())return 4;
+ if(cfg.enabled!=0x7f||cfg.rgb[0][0]!=245||MarioColors::dirty())return 4;
  finish(keep!=0);
  if(MarioColors::dirty()!=(keep!=0))return 5;
- if(mask()!=0x7f||MarioColors::rgb(0)[0]!=(keep?247:251))return 6;
+ if(mask()!=0x7f||MarioColors::rgb(0)[0]!=(keep?235:245))return 6;
  MarioColors::stageInto(&cfg);
- if(cfg.rgb[0][0]!=(keep?247:251))return 7;
+ if(cfg.rgb[0][0]!=(keep?235:245))return 7;
  return 0;
 }
 '''
@@ -242,7 +245,7 @@ API int menuRoute(){
     def test_defaults_configuration_validation_and_all_seven_parts_roundtrip(self):
         self.assertEqual(self.lib.editor(0), 0)
 
-    def test_original_custom_rgb_fine_adjustment_and_option_reset(self):
+    def test_original_custom_hsl_fine_adjustment_and_option_reset(self):
         self.assertEqual(self.lib.editor(1), 0)
 
     def test_keep_discard_restore_colors_modes_and_previous_dirty_status(self):

@@ -1,9 +1,10 @@
 # Moonshine — a Super Mario Sunshine practice mod
 
-**V2.3.0 — Frame By Frame** adds frame advance, free camera, editable TAS
-projects, three savestate slots and expanded layout and colour controls.
+**V2.3.1 — Frame By Frame** improves free camera with optional smoothing,
+adds HSL colour controls and fixes savestate and file-select issues.
+Settings and practice files now live together in `/Moonshine data`.
 See the [English guide](doc/guide-en.md), [日本語ガイド](doc/guide-ja.md),
-and [release notes](doc/release-notes-v2.3.0.md).
+and [release notes](doc/release-notes-v2.3.1.md).
 
 It implements most of the [GCT generator](https://gct.zint.ch/) practice codes, adds emulator-like savestates to console (Wii through Nintendont), and more. It supports JP 1.0, US, and PAL versions. Vibe coded software, use at your own risk.
 
@@ -37,8 +38,11 @@ Features:
 
 ### Console (wii)
 
-Choose the **English** or **日本語版** launcher download from the Releases
-page. Copy its `apps` folder to the SD root, so the launcher is at
+Choose `Moonshine_ENGLISH-MENUS_Launcher_V2.3.1_US-PAL-JP.zip` for
+**English Moonshine menus on US, PAL or JP Sunshine**. The separate
+`Moonshine_JAPANESE-MENUS_Launcher_V2.3.1_US-PAL-JP.zip` selects the
+Japanese launcher and Japanese Moonshine menus when playing JP Sunshine.
+Both downloads support all three game regions. Copy its `apps` folder to the SD root, so the launcher is at
 `/apps/moonshine_launcher/boot.dol`. It lets you select JP, US or PAL Sunshine
 from SD, USB or a real disc, and configure Nintendont options such as
 progressive scan and the retail PAL language.
@@ -51,20 +55,27 @@ region you select.
 
 Replace the app files when updating. If you still use `apps/susamune_launcher`,
 rename it to `apps/moonshine_launcher` first to avoid a duplicate Homebrew
-Channel entry. Keep root-level `susamune.ini`, records, ghosts, achievements
-and playlists. Older states and TAS projects need their matching build;
-make fresh ones for V2.3.0.
+Channel entry. Keep your settings, records, ghosts, achievements and playlists.
+On first launch, existing Moonshine files move into `/Moonshine data`.
+Older states and TAS projects need their matching build; make fresh ones
+for V2.3.1.
 
-Put `background.png` and optional `bgm.mp3` in `/Moonshine_Theme` at the SD
-root. The launcher creates a missing folder. The **日本語版** ZIP includes a
-default flag background; skip its `Moonshine_Theme` folder if you want to
-keep your existing theme.
+Put `background.png` and optional `bgm.mp3` in `/Moonshine data/theme`.
+The launcher creates missing folders. The **日本語版** ZIP includes an optional
+flag background at that location; skip it to keep your existing theme.
+The English ZIP supplies no theme.
 
-Settings and binds are stored per region in `susamune.ini` at the root of the SD card, in `[settings_jp]` / `[binds_jp]` sections and their `us` / `pal` counterparts.
+Settings and binds are stored per region in `/Moonshine data/moonshine.ini`, in `[settings_jp]` / `[binds_jp]` sections and their `us` / `pal` counterparts.
+
+The data folder also contains `ghosts`, `states`, `tas`, `crashes` and `backups`.
+See [the folder guide](doc/guide-en.md#your-data-folder) for file locations.
 
 ### Emulator
 
-Choose the **English** or **日本語版** Dolphin download. Apply its matching BPS to a clean
+Choose `Moonshine_ENGLISH-MENUS_Dolphin_V2.3.1_US-PAL-JP.zip` for English
+Moonshine menus on **US, PAL or JP**, or
+`Moonshine_JAPANESE-MENUS_Dolphin_V2.3.1_JP.zip` for Japanese menus on JP.
+Apply its matching BPS to a clean
 ISO with a BPS patcher such as
 [Floating IPS](https://github.com/Alcaro/Flips/releases). The patch verifies
 the source image before writing the Moonshine ISO.

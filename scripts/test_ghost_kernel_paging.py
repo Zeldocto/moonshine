@@ -15,15 +15,19 @@ import validate_ghost_storage as storage
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTO = 0xFFFFFFFF
-PERSONAL = "/susamune_ghosts/jp/p0/"
-IMPORT = "/susamune_ghosts/import/"
+PERSONAL = "/Moonshine data/ghosts/jp/p0/"
+IMPORT = "/Moonshine data/ghosts/import/"
 
 EXPORTS = r'''
 __declspec(dllexport) void reset(void) {
+ testStoragePrefix=MOONSHINE_DATA_ROOT;
  testCount=writeCount=readBytes=readCalls=dirCalls=maxRead=writeBytes=0;
  failWriteAfter=0xFFFFFFFFu; failSync=false; directoryResult=FR_OK;
  memset(testFiles,0,sizeof(testFiles)); memset(&CatalogStorage,0,sizeof(CatalogStorage));
  memset(testPayload,0,sizeof(testPayload)); SusamuneGhostInit();
+}
+__declspec(dllexport) void volume(u32 usb) {
+ testStoragePrefix=usb?"1:" MOONSHINE_DATA_ROOT:MOONSHINE_DATA_ROOT;
 }
 __declspec(dllexport) int add(const char *path,const u8 *bytes,u32 size) {
  int i=lookup(path); if(i<0) i=(int)testCount++;
@@ -215,6 +219,24 @@ class GhostKernelPagingTests(unittest.TestCase):
         self.assertEqual(self.file(IMPORT + "ghost_35.smsghost"), changed)
         missing = b"missing.smsghost".ljust(96,b"\0")
         self.assertEqual(self.request(2, profile=4, payload=missing)["status"], -9)
+
+    def test_maximum_import_leaf_roundtrips_under_both_data_volume_prefixes(self):
+        ghost = build_ghost()
+        crc = struct.unpack_from(">I", ghost, 12)[0]
+        leaf = "x" * (95 - len(".smsghost")) + ".smsghost"
+        for volume in (0, 1):
+            with self.subTest(volume=volume):
+                self.dll.reset()
+                self.dll.volume(volume)
+                path = ("1:" if volume else "") + IMPORT + leaf
+                self.assertEqual(len(path), 127 if volume else 125)
+                self.add(path, ghost)
+                rows, total, _, _ = self.page(profile=4)
+                self.assertEqual((total, rows[0][2]), (1, leaf))
+                result = self.request(2, profile=4,
+                    payload=leaf.encode().ljust(96, b"\0"), generation=crc)
+                self.assertEqual(result["status"], 0)
+                self.assertEqual(ctypes.string_at(self.dll.payload(), len(ghost)), ghost)
 
     def test_partial_write_and_out_of_space_preserve_previous_bank(self):
         ghost = build_ghost()

@@ -1,4 +1,5 @@
 #include "susamune/creation_extras.hxx"
+#include "susamune/retail_input.hxx"
 
 #include "Dolphin/mem.h"
 #include "Dolphin/printf.h"
@@ -905,7 +906,7 @@ const u8 *CreationExtras::nativeTimerRgb(const J2DPane *pane, bool *custom) cons
 
 bool CreationExtras::beginHudDraw(J2DScreen *screen) {
     if (sHealthDraw.active || !screen || screen != mHudScreen ||
-        gpApplication.mContext != TApplication::CONTEXT_DIRECT_STAGE ||
+        RetailInput::stageDirector() != gpMarDirector ||
         !gpMarDirector || !gpMarDirector->_260 || !gpMarDirector->mGCConsole)
         return false;
     TGCConsole2 *console = gpMarDirector->mGCConsole;

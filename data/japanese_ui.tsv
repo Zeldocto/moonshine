@@ -274,19 +274,19 @@ Metadata	メタデータ
 Metadata editor	メタデータエディター
 
 # Creation/style editor.
-Text red	文字・赤
-Text green	文字・緑
-Text blue	文字・青
+Text hue	文字・色相
+Text saturation	文字・彩度
+Text lightness	文字・明度
 Text opacity	文字・透明度
 Text brightness	文字・明るさ
-Background red	背景・赤
-Background green	背景・緑
-Background blue	背景・青
+Background hue	背景・色相
+Background saturation	背景・彩度
+Background lightness	背景・明度
 Background opacity	背景・透明度
 Padding	余白
-Element red	要素・赤
-Element green	要素・緑
-Element blue	要素・青
+Element hue	要素・色相
+Element saturation	要素・彩度
+Element lightness	要素・明度
 Element opacity	要素・透明度
 Element brightness	要素・明るさ
 All	全体
@@ -295,11 +295,11 @@ All characters	全文字
 Character %s	文字 %s
  (space)	 （空白）
 Position X:%u Y:%u   Size:%u pct	位置 X:%u Y:%u   サイズ:%u%%
-Element RGB	要素RGB
-Text RGB	文字RGB
-Character RGB	文字RGB
-%s:%03u,%03u,%03u   Background RGB:%03u,%03u,%03u	%s:%03u,%03u,%03u   背景RGB:%03u,%03u,%03u
-%s: Mixed   Background RGB:%03u,%03u,%03u	%s: 混在   背景RGB:%03u,%03u,%03u
+Element HSL	要素HSL
+Text HSL	文字HSL
+Character HSL	文字HSL
+%s:%03u,%03u,%03u   Background HSL:%03u,%03u,%03u	%s:%03u,%03u,%03u   背景HSL:%03u,%03u,%03u
+%s: Mixed   Background HSL:%03u,%03u,%03u	%s: 混在   背景HSL:%03u,%03u,%03u
 %s: Mixed	%s: 混在
 Mixed	混在
 %u pct	%u%%
@@ -1214,7 +1214,7 @@ English	英語
 # FOXTROT practice and SD workflow.
 Input replay (experimental)	入力再生（試験機能）
 Pause the game and choose the inputs for each frame.	ゲームを止めて、1コマずつ入力を決められます。
-Move the camera while gameplay or a ghost is paused.	ゲームやゴーストを止めてカメラを動かせます。
+Move the camera with gameplay paused or running.	一時停止中も再開中もカメラを操作できます。
 Repeat your own inputs from a savestate. Saved ghosts are in Ghosts.	ステートから自分の入力を再生します。ゴーストは別メニューです。
 Cancel armed pause	一時停止の予約を取消
 Resume gameplay	ゲームを再開
@@ -1552,3 +1552,14 @@ TAS checkpoint loaded - recording continues	TASの中間地点を読込済み。
 TAS editing resumed - Step or Resume when ready	TAS編集を再開しました。入力を決めてコマ送りか再開を選びます。
 Area timing differs - return to a checkpoint to edit	エリア移動のタイミングが違います。中間地点に戻ると編集できます。
 Checkpoint unavailable here after desync. Replay can continue.	ずれのため、この地点では中間地点を作れません。再生は続けられます。
+
+# V2.3.1 colour controls and live free camera.
+%u deg	%u度
+Original: retail colours   Custom: your HSL   Colour edits select Custom	Original: 元の色   Custom: HSL指定   色の編集でCustomに切り替え
+Original: shaded tint   Custom: flat colour   HSL works in both	Original: 陰影あり   Custom: 指定色   どちらもHSLで調整
+On pauses gameplay. Off restores the game camera without changing pause.	オンでゲームを停止。オフは視点だけを戻し、停止状態は変えません。
+Resume runs the game at normal speed and keeps free camera on.	フリーカメラを保ったまま、ゲームを通常速度で再開します。
+
+# Optional camera movement and rotation easing.
+Camera smoothing	カメラの補間時間
+Ease moving and turning starts/stops. Off responds immediately.	移動と回転の開始・停止を滑らかにします。Offなら即座に反応します。

@@ -1,5 +1,6 @@
 #include "susamune/water_colors.hxx"
 #include "susamune/fludd_colors.hxx"
+#include "susamune/retail_input.hxx"
 
 #include "Dolphin/GX.h"
 #include "Dolphin/mem.h"
@@ -40,8 +41,8 @@ bool mem1(const void *pointer, u32 size) {
            size <= 0x81800000u - address;
 }
 bool live() {
-    return gpApplication.mContext == TApplication::CONTEXT_DIRECT_STAGE &&
-        gpMarDirector && gpMarDirector == sDirector && gpMarDirector->_260 &&
+    return gpMarDirector && RetailInput::stageDirector() == gpMarDirector &&
+        gpMarDirector == sDirector && gpMarDirector->_260 &&
         gpMarDirector->mCurState >= TMarDirector::STATE_GAME_STARTING;
 }
 GXColor &color(void *owner, u32 offset) {

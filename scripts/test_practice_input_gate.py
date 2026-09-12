@@ -45,7 +45,12 @@ static bool sPaused,sPausePending,sCollisionHooksReady,sStateHookReady,sRecord,s
 static bool sStepQueued,sAvailable,sActionable;
 static u8 sMenuAction,sSpinRemaining;
 static u32 sSteps,invalidations,stops;
-static bool classicSuppressed;
+static bool classicSuppressed,nativePause;
+struct TPauseMenu2 {enum {MENU_APPEARING=0,MENU_OPEN=1,MENU_SAVING=3};unsigned mState;};
+static TPauseMenu2 pauseMenu;
+static struct {TPauseMenu2 *mPauseMenu;} director={&pauseMenu},*gpMarDirector=&director;
+bool nativePaused(){return nativePause;}
+bool mem1(const void *p,unsigned){return p!=nullptr;}
 namespace Ghost { bool observerActive() { return false; } }
 namespace WarpWheel { void suppressClassicInstantUntilRelease() { classicSuppressed=true; } }
 namespace CrashReport { void note(unsigned,unsigned,unsigned) {} }
@@ -74,7 +79,7 @@ extern "C" __declspec(dllexport) unsigned dispatch(unsigned pause,unsigned befor
 extern "C" __declspec(dllexport) void reset(unsigned flags,unsigned bind) {
     sPaused=flags&1;sPausePending=flags&2;sActionable=flags&4;
     sAvailable=(flags&8)==0;sCollisionHooksReady=(flags&16)==0;sStateHookReady=true;
-    sRecord=flags&32;sReplay=false;sFreeCamera=false;
+    sRecord=flags&32;sReplay=false;sFreeCamera=false;nativePause=false;pauseMenu.mState=1;director.mPauseMenu=&pauseMenu;
     sStepQueued=false;sStripButtons=0;sMenuAction=0;sSpinRemaining=0;
     sSteps=invalidations=stops=0;classicSuppressed=false;
     for (unsigned i=0;i<BIND_COUNT;++i) localBinds.mMask[i]=0;
@@ -102,6 +107,14 @@ extern "C" __declspec(dllexport) unsigned request(unsigned kind,unsigned menu) {
     return result|(sPaused<<1)|(sPausePending<<2)|(sStepQueued<<3)|
         ((unsigned)sMenuAction<<4)|(invalidations<<8)|(stops<<16);
 }
+extern "C" __declspec(dllexport) void native(unsigned camera,unsigned state) {
+    nativePause=true;sActionable=false;sFreeCamera=camera;pauseMenu.mState=state;
+}
+extern "C" __declspec(dllexport) unsigned resumeCamera(unsigned menu) {
+    sFreeCamera=true;sPaused=true;
+    requestPauseToggle(menu!=0);
+    return sFreeCamera|(sPaused<<1)|((unsigned)sMenuAction<<4);
+}
 extern "C" __declspec(dllexport) unsigned filter(unsigned add,const SusamunePracticeInput *in,
                                                   SusamunePracticeInput *out) {
     sStripButtons|=(u16)add;sPhysical=*in;sConsumed=*in;
@@ -119,6 +132,21 @@ extern "C" __declspec(dllexport) unsigned filter(unsigned add,const SusamunePrac
 
     def setUp(self):
         self.lib.reset(5, 8)
+
+    def test_resume_keeps_free_camera_for_both_shortcut_and_menu(self):
+        self.assertEqual(self.lib.resumeCamera(0), 1)
+        self.assertEqual(self.lib.resumeCamera(1), 1 | 2 | 32)
+
+    def test_native_pause_resume_is_scoped_to_camera_and_refuses_save_dialog(self):
+        self.lib.reset(4, 8)
+        self.lib.native(0, 1)
+        self.assertEqual(self.lib.request(1, 1) & 255, 5)  # ordinary Pause still buffers
+        self.lib.reset(4, 8)
+        self.lib.native(1, 1)
+        self.assertEqual(self.lib.request(1, 1) & 255, 49)  # camera queues retail resume
+        self.lib.reset(4, 8)
+        self.lib.native(1, 3)
+        self.assertEqual(self.lib.request(1, 1), 0)
 
     def filtered(self, add=0, **fields):
         raw, out = Input(**fields), Input()

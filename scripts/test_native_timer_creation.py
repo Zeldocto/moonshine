@@ -44,6 +44,7 @@ class NativeTimerCreationTests(unittest.TestCase):
 #include "susamune/susamune_cfg.h"
 #define private public
 #include "susamune/creation.hxx"
+#include "susamune/creation_color.hxx"
 #include "susamune/creation_extras.hxx"
 #undef private
 #define SUSAMUNE_GAME_VERSION 1
@@ -69,7 +70,7 @@ struct TMarioGamePad {
             "CreationEditor::begin", "CreationEditor::optionEnabled", "CreationEditor::moveOption",
             "CreationEditor::repeatInput", "CreationEditor::update"))
         layoutfunc = function(layout, "updatePositionScale")
-        code = prelude + cfgfuncs + record + persistfuncs + enums
+        code = prelude + re.sub(r"^#include[^\n]*", "", (ROOT / "src/creation_color.cpp").read_text(), flags=re.M) + cfgfuncs + record + persistfuncs + enums
         code += function(creation, "clampi")
         code += "namespace LayoutEditor {" + layoutfunc + "}\n"
         # clampi already precedes the layout helper.
@@ -120,10 +121,11 @@ API int editor(int test) {
  e.begin(&s,rgb,backup,2,2,0,CreationEditor::CAP_ALL|CreationEditor::CAP_OFFSET_POSITION);
  TMarioGamePad p={};
  if(test==0||test==1){
+  e.mOption=OPTION_TEXT_L;
   p.mButtons.mInput=TMarioGamePad::CSTICK_RIGHT|(test?TMarioGamePad::Y:0);
   p.mButtons.mFrameInput=TMarioGamePad::CSTICK_RIGHT;
   u8 result=e.update(&p,original,defaults,2);
-  return rgb[0][0]==(test?21:24)&&rgb[1][0]==rgb[0][0]&&
+  return rgb[0][0]==(test?22:27)&&rgb[1][0]==rgb[0][0]&&
    (result&CreationEditor::UPDATE_COLOR_CHANGED)?0:1;
  }
  if(test==2){
@@ -171,13 +173,13 @@ API int modes(int test) {
  e.update(&p,original,rgb,15);
  p.mButtons.mInput=p.mButtons.mFrameInput=TMarioGamePad::CSTICK_RIGHT;
  e.update(&p,original,rgb,15);
- if(custom!=0x3fff||rgb[14][0]!=38||rgb[13][0]!=33)return 7;
+ if(custom!=0x3fff||rgb[14][0]!=35||rgb[13][0]!=33)return 7;
  if(test==3)return 0;
  p={};p.mButtons.mRapidInput=test==4?TMarioGamePad::A:TMarioGamePad::B;
  e.update(&p,original,rgb,15);p.mButtons.mRapidInput=TMarioGamePad::A;
  const u8 result=e.update(&p,original,rgb,15);
  if(e.editing()||!(result&CreationEditor::UPDATE_FINISHED))return 8;
- if(test==4)return custom==0x3fff&&rgb[14][0]==38?0:9;
+ if(test==4)return custom==0x3fff&&rgb[14][0]==35?0:9;
  return custom==0x7fff&&rgb[14][0]==34&&(result&CreationEditor::UPDATE_CANCELLED)?0:10;
 }
 API int persistModes() {
@@ -227,12 +229,12 @@ API int originalRgbEdits(int test) {
  extras.beginNativeTimerEditor();if(single)extras.mEditor.selectTarget(3);
  TMarioGamePad p={};p.mButtons.mInput=p.mButtons.mFrameInput=TMarioGamePad::CSTICK_DOWN;
  extras.updateEditor(&p);p.mButtons.mInput=p.mButtons.mFrameInput=TMarioGamePad::CSTICK_RIGHT;
- extras.updateEditor(&p);
+ extras.mEditor.mOption=OPTION_TEXT_L;extras.updateEditor(&p);
  u32 expected=unrelated;
  for(unsigned i=0;i<15;i++)if(!single||i==2)expected|=SUSAMUNE_CREATION_COLOR(nativeTimerColorSlot(i));
  if(extras.mColorPresent!=expected||extras.mNativeTimerCustomMask||!extras.mDirty)return 1;
  for(unsigned i=0;i<15;i++)
-  if(extras.mColors[nativeTimerColorSlot(i)][0]!=(!single||i==2?24:20))return 2;
+  if(extras.mColors[nativeTimerColorSlot(i)][0]!=(!single||i==2?27:20))return 2;
  p={};p.mButtons.mRapidInput=cancel?TMarioGamePad::B:TMarioGamePad::A;
  extras.updateEditor(&p);p.mButtons.mRapidInput=TMarioGamePad::A;extras.updateEditor(&p);
  if(extras.editing()||extras.mNativeTimerCustomMask)return 3;
@@ -245,8 +247,9 @@ API int originalRgbEdits(int test) {
  extras.stageInto(&cfg);extras.stageWallkickInto(&modes);
  memset(&loaded,0,sizeof(loaded));loaded.adopt(&cfg);loaded.adoptWallkick(&modes);
  if(loaded.mColorPresent!=expected||loaded.mNativeTimerCustomMask||!loaded.nativeTimerColorsEnabled())return 6;
+ const u8 edited[3]={27,40,54};
  for(unsigned i=0;i<15;i++)if(!single||i==2)
-  for(unsigned c=0;c<3;c++)if(loaded.mColors[nativeTimerColorSlot(i)][c]!=(c?20+c*10:24))return 7;
+  for(unsigned c=0;c<3;c++)if(loaded.mColors[nativeTimerColorSlot(i)][c]!=edited[c])return 7;
  return 0;
 }
 '''

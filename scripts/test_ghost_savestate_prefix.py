@@ -96,7 +96,7 @@ ClockPhase sClockPhase; ObserverPhase sObserverPhase;
 bool sRecording,sRestoredPrefix,sFrameFrozen,sFrameAssisted,sStageRoutePending;
 u8 sRestoredEndpoint;
 bool sPendingHadLiveRoute,sPendingContinueRecording,sBoundaryPending,sLiveRouteValid;
-bool sPlaybackPinned,sPinRouteCheckPending,sGhostVisible,cleanup,fastForward;
+bool sPlaybackPinned,sPinRouteCheckPending,sChallengerNotified,sGhostVisible,cleanup,fastForward;
 struct Mario { struct {f32 x,y,z;} mTranslation; s16 mModelAngleY; } mario,*gpMarioOriginal=&mario;
 struct Director {} director,*gpMarDirector=&director;
 struct Menu {void toast(const char*){}} *gMenu=0;

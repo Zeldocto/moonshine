@@ -65,11 +65,19 @@ static int f_rename_char(const char *from,const char *to) {
 
 EXPORTS = r'''
 __declspec(dllexport) void reset(void) {
+ testStoragePrefix=MOONSHINE_DATA_ROOT;
  testCount=writeCount=readBytes=readCalls=dirCalls=maxRead=writeBytes=0;
  failWriteAfter=0xFFFFFFFFu; failSync=failRename=failUnlink=false; failOpenPath[0]=0; directoryResult=FR_OK;
  failReadAfter=0xffffffffu;
  memset(testFiles,0,sizeof(testFiles)); memset(statePool,0x5A,sizeof(statePool));
  memset(stateStaging,0xA5,sizeof(stateStaging)); memset(stateExtra,0xC3,sizeof(stateExtra)); SusamuneStateStorageInit();
+}
+__declspec(dllexport) void volume(u32 usb) {
+ testStoragePrefix=usb?"1:" MOONSHINE_DATA_ROOT:MOONSHINE_DATA_ROOT;
+ SusamuneStateStorageInit();
+}
+__declspec(dllexport) const char *maximumPath(void) {
+ TasDirectory(0xffffffffu);Paths(0xffffffffu);return Path;
 }
 __declspec(dllexport) void submit(u32 command,u32 id,u32 offset,u32 size,u32 crc,u32 session) {
  struct SusamuneStateRequest *r=&stateMailbox.request;
@@ -176,6 +184,7 @@ class StateStorageKernelTests(unittest.TestCase):
         cls.lib.file.argtypes = [C.c_char_p, C.POINTER(C.c_uint)]
         cls.lib.requestName.argtypes = [C.c_char_p]
         cls.lib.openFailure.argtypes = [C.c_char_p]
+        cls.lib.maximumPath.restype = C.c_char_p
         for name in ('mailbox', 'pool', 'staging', 'extra', 'file'):
             getattr(cls.lib, name).restype = C.c_void_p
         global POOL, STAGING, EXPANDED
@@ -184,6 +193,13 @@ class StateStorageKernelTests(unittest.TestCase):
     def setUp(self):
         self.lib.reset()
         self.buffers = []
+
+    def test_project_component_paths_fit_both_volume_prefixes_with_wide_ids(self):
+        for volume in (0, 1):
+            self.lib.volume(volume)
+            expected = ('1:' if volume else '') + '/Moonshine data/tas/tas_4294967295/state_4294967295.mss'
+            self.assertEqual(self.lib.maximumPath().decode(), expected)
+            self.assertLess(len(expected), 96)
 
     def buffer(self, data):
         out = C.create_string_buffer(data)
@@ -200,11 +216,11 @@ class StateStorageKernelTests(unittest.TestCase):
 
     def file(self, id=1, suffix='mss'):
         size = C.c_uint()
-        pointer = self.lib.file(f'/moonshine_states/state_{id:08d}.{suffix}'.encode(), C.byref(size))
+        pointer = self.lib.file(f'/Moonshine data/states/state_{id:08d}.{suffix}'.encode(), C.byref(size))
         return C.string_at(pointer, size.value) if pointer else None
 
     def add(self, id, data, suffix='mss'):
-        self.lib.add(f'/moonshine_states/state_{id:08d}.{suffix}'.encode(), self.buffer(data), len(data))
+        self.lib.add(f'/Moonshine data/states/state_{id:08d}.{suffix}'.encode(), self.buffer(data), len(data))
 
     def export(self, data=b'opaque compressed payload' * 900, meta=b'owned game and profile metadata', offset=32):
         self.lib.prepare(self.buffer(data), len(data), offset, self.buffer(meta), len(meta))
@@ -317,7 +333,7 @@ class StateStorageKernelTests(unittest.TestCase):
                 if fault=='sync':self.lib.failures(0xFFFFFFFF,1,0)
                 if fault=='rename':self.lib.failures(0xFFFFFFFF,0,1)
                 if fault=='unlink':self.lib.unlinkFailure(1)
-                if fault=='read':self.lib.openFailure(b'/moonshine_states/state_00000001.name0')
+                if fault=='read':self.lib.openFailure(b'/Moonshine data/states/state_00000001.name0')
                 self.assertEqual(self.rename(crc,b'New'),IO)
                 self.lib.failures(0xFFFFFFFF,0,0);self.lib.unlinkFailure(0);self.lib.openFailure(b'')
                 self.lib.reboot()

@@ -58,6 +58,7 @@ still dropped, since those sections are regenerated wholesale.
 #include "ff_utf8.h"
 
 #include "susamune/susamune_cfg.h"
+#include "susamune/data_paths.h"
 #include "susamune/mod_bin.h"
 
 // Set by DIinit() from the disc header; SusamuneCfgInit() runs after it.
@@ -138,7 +139,10 @@ static bool CfgReady = false;
 static u32  CfgAckSeq = 0;
 
 #define SUSAMUNE_PB_FILE_COUNT 2
-#define SUSAMUNE_PB_PATH_SIZE  40
+#define SUSAMUNE_PB_PATH_SIZE  64
+typedef char JournalPathsFit[
+	sizeof("1:" MOONSHINE_DATA_ROOT "/moonshine_stage_playlists_v2_a.bin") <=
+	        SUSAMUNE_PB_PATH_SIZE ? 1 : -1];
 
 static u32 PbAckSeq = 0;
 static u32 PbGeneration = 0;
@@ -717,9 +721,9 @@ static bool InitPbFiles(struct SusamuneCfg *cfg, const char *region)
 	for (i = 0; i < SUSAMUNE_ILING_PB_LEGACY_MAX_SLOTS; i++)
 		pbs->values[i] = SUSAMUNE_ILING_PB_UNSET;
 
-	_sprintf(PbPaths[0], "%s/susamune_pbs_v1_%s_a.bin",
+	_sprintf(PbPaths[0], "%s/moonshine_pbs_v1_%s_a.bin",
 	         SusamuneCfgStoragePrefix(), region);
-	_sprintf(PbPaths[1], "%s/susamune_pbs_v1_%s_b.bin",
+	_sprintf(PbPaths[1], "%s/moonshine_pbs_v1_%s_b.bin",
 	         SusamuneCfgStoragePrefix(), region);
 
 	for (fileIndex = 0; fileIndex < SUSAMUNE_PB_FILE_COUNT; fileIndex++)
@@ -748,9 +752,9 @@ static bool InitPbFiles(struct SusamuneCfg *cfg, const char *region)
 	}
 
 	InitPbProfileDefaults(profiles);
-	_sprintf(PbPaths[0], "%s/susamune_pbs_v2_%s_a.bin",
+	_sprintf(PbPaths[0], "%s/moonshine_pbs_v2_%s_a.bin",
 	         SusamuneCfgStoragePrefix(), region);
-	_sprintf(PbPaths[1], "%s/susamune_pbs_v2_%s_b.bin",
+	_sprintf(PbPaths[1], "%s/moonshine_pbs_v2_%s_b.bin",
 	         SusamuneCfgStoragePrefix(), region);
 	PbGeneration = 0;
 	PbActiveFile = -1;
@@ -964,9 +968,9 @@ static bool InitProgressFiles(struct SusamuneProgressCfg *progress)
 	bool safe = true;
 
 	InitProgressDefaults(progress);
-	_sprintf(ProgressPaths[0], "%s/susamune_progress_v1_a.bin",
+	_sprintf(ProgressPaths[0], "%s/moonshine_progress_v1_a.bin",
 	         SusamuneCfgStoragePrefix());
-	_sprintf(ProgressPaths[1], "%s/susamune_progress_v1_b.bin",
+	_sprintf(ProgressPaths[1], "%s/moonshine_progress_v1_b.bin",
 	         SusamuneCfgStoragePrefix());
 	ProgressGeneration = 0;
 	ProgressActiveFile = -1;
@@ -1414,13 +1418,13 @@ static bool InitStagePlaylistFiles(
 	bool safe = true;
 
 	InitStagePlaylistDefaults(playlists);
-	_sprintf(StagePlaylistPaths[0], "%s/susamune_stage_playlists_v2_a.bin",
+	_sprintf(StagePlaylistPaths[0], "%s/moonshine_stage_playlists_v2_a.bin",
 	         SusamuneCfgStoragePrefix());
-	_sprintf(StagePlaylistPaths[1], "%s/susamune_stage_playlists_v2_b.bin",
+	_sprintf(StagePlaylistPaths[1], "%s/moonshine_stage_playlists_v2_b.bin",
 	         SusamuneCfgStoragePrefix());
-	_sprintf(StagePlaylistV1Paths[0], "%s/susamune_stage_playlists_v1_a.bin",
+	_sprintf(StagePlaylistV1Paths[0], "%s/moonshine_stage_playlists_v1_a.bin",
 	         SusamuneCfgStoragePrefix());
-	_sprintf(StagePlaylistV1Paths[1], "%s/susamune_stage_playlists_v1_b.bin",
+	_sprintf(StagePlaylistV1Paths[1], "%s/moonshine_stage_playlists_v1_b.bin",
 	         SusamuneCfgStoragePrefix());
 	StagePlaylistGeneration = 0;
 	StagePlaylistActiveFile = -1;
@@ -1705,9 +1709,9 @@ static void InitStageTargetFiles(struct SusamuneStageTargetsCfg *targets,
 	bool selectedMigrated = false;
 
 	InitStageTargetDefaults(targets);
-	_sprintf(StageTargetPaths[0], "%s/susamune_stage_targets_%s_a.bin",
+	_sprintf(StageTargetPaths[0], "%s/moonshine_stage_targets_%s_a.bin",
 	         SusamuneCfgStoragePrefix(), region);
-	_sprintf(StageTargetPaths[1], "%s/susamune_stage_targets_%s_b.bin",
+	_sprintf(StageTargetPaths[1], "%s/moonshine_stage_targets_%s_b.bin",
 	         SusamuneCfgStoragePrefix(), region);
 	StageTargetGeneration = 0;
 	StageTargetActiveFile = -1;
@@ -3722,9 +3726,9 @@ static bool InitSplitStatsV8Files(struct SusamuneSplitStatsCfgV8 *stats)
 	bool migrated = false;
 
 	InitSplitStatsV8Defaults(stats);
-	_sprintf(SplitStatsPaths[0], "%s/susamune_il_stats_v8_a.bin",
+	_sprintf(SplitStatsPaths[0], "%s/moonshine_il_stats_v8_a.bin",
 	         SusamuneCfgStoragePrefix());
-	_sprintf(SplitStatsPaths[1], "%s/susamune_il_stats_v8_b.bin",
+	_sprintf(SplitStatsPaths[1], "%s/moonshine_il_stats_v8_b.bin",
 	         SusamuneCfgStoragePrefix());
 	SplitStatsGeneration = 0;
 	SplitStatsActiveFile = -1;
@@ -3784,9 +3788,9 @@ static bool InitSplitStatsV8Files(struct SusamuneSplitStatsCfgV8 *stats)
 		u32 selectedChecksum = 0;
 		s32 selectedFile = -1;
 
-		_sprintf(v7Paths[0], "%s/susamune_il_stats_v7_a.bin",
+		_sprintf(v7Paths[0], "%s/moonshine_il_stats_v7_a.bin",
 		         SusamuneCfgStoragePrefix());
-		_sprintf(v7Paths[1], "%s/susamune_il_stats_v7_b.bin",
+		_sprintf(v7Paths[1], "%s/moonshine_il_stats_v7_b.bin",
 		         SusamuneCfgStoragePrefix());
 		for (fileIndex = 0; fileIndex < SUSAMUNE_PB_FILE_COUNT; fileIndex++)
 		{
@@ -3845,9 +3849,9 @@ static bool InitSplitStatsV8Files(struct SusamuneSplitStatsCfgV8 *stats)
 		u32 selectedGeneration = 0;
 		s32 selectedFile = -1;
 
-		_sprintf(v6Paths[0], "%s/susamune_il_stats_v6_a.bin",
+		_sprintf(v6Paths[0], "%s/moonshine_il_stats_v6_a.bin",
 		         SusamuneCfgStoragePrefix());
-		_sprintf(v6Paths[1], "%s/susamune_il_stats_v6_b.bin",
+		_sprintf(v6Paths[1], "%s/moonshine_il_stats_v6_b.bin",
 		         SusamuneCfgStoragePrefix());
 		for (fileIndex = 0; fileIndex < SUSAMUNE_PB_FILE_COUNT; fileIndex++)
 		{
@@ -3904,9 +3908,9 @@ static bool InitSplitStatsV8Files(struct SusamuneSplitStatsCfgV8 *stats)
 		u32 selectedGeneration = 0;
 		s32 selectedFile = -1;
 
-		_sprintf(v5Paths[0], "%s/susamune_il_stats_v5_a.bin",
+		_sprintf(v5Paths[0], "%s/moonshine_il_stats_v5_a.bin",
 		         SusamuneCfgStoragePrefix());
-		_sprintf(v5Paths[1], "%s/susamune_il_stats_v5_b.bin",
+		_sprintf(v5Paths[1], "%s/moonshine_il_stats_v5_b.bin",
 		         SusamuneCfgStoragePrefix());
 		for (fileIndex = 0; fileIndex < SUSAMUNE_PB_FILE_COUNT; fileIndex++)
 		{
@@ -3962,9 +3966,9 @@ static bool InitSplitStatsV8Files(struct SusamuneSplitStatsCfgV8 *stats)
 		u32 selectedChecksum = 0;
 		s32 selectedFile = -1;
 
-		_sprintf(v4Paths[0], "%s/susamune_il_stats_v4_a.bin",
+		_sprintf(v4Paths[0], "%s/moonshine_il_stats_v4_a.bin",
 		         SusamuneCfgStoragePrefix());
-		_sprintf(v4Paths[1], "%s/susamune_il_stats_v4_b.bin",
+		_sprintf(v4Paths[1], "%s/moonshine_il_stats_v4_b.bin",
 		         SusamuneCfgStoragePrefix());
 		for (fileIndex = 0; fileIndex < SUSAMUNE_PB_FILE_COUNT; fileIndex++)
 		{
@@ -4017,9 +4021,9 @@ static bool InitSplitStatsV8Files(struct SusamuneSplitStatsCfgV8 *stats)
 		u32 selectedGeneration = 0;
 		bool selected = false;
 
-		_sprintf(v3Paths[0], "%s/susamune_il_stats_v3_a.bin",
+		_sprintf(v3Paths[0], "%s/moonshine_il_stats_v3_a.bin",
 		         SusamuneCfgStoragePrefix());
-		_sprintf(v3Paths[1], "%s/susamune_il_stats_v3_b.bin",
+		_sprintf(v3Paths[1], "%s/moonshine_il_stats_v3_b.bin",
 		         SusamuneCfgStoragePrefix());
 		for (fileIndex = 0; fileIndex < SUSAMUNE_PB_FILE_COUNT; fileIndex++)
 		{
@@ -4069,9 +4073,9 @@ static bool InitSplitStatsV8Files(struct SusamuneSplitStatsCfgV8 *stats)
 		u32 selectedSchemaHash = SUSAMUNE_SPLIT_STATS_V2_SCHEMA_HASH;
 		bool selected = false;
 
-		_sprintf(v2Paths[0], "%s/susamune_il_stats_v2_a.bin",
+		_sprintf(v2Paths[0], "%s/moonshine_il_stats_v2_a.bin",
 		         SusamuneCfgStoragePrefix());
-		_sprintf(v2Paths[1], "%s/susamune_il_stats_v2_b.bin",
+		_sprintf(v2Paths[1], "%s/moonshine_il_stats_v2_b.bin",
 		         SusamuneCfgStoragePrefix());
 		for (fileIndex = 0; fileIndex < SUSAMUNE_PB_FILE_COUNT; fileIndex++)
 		{
@@ -4130,9 +4134,9 @@ static bool InitSplitStatsV8Files(struct SusamuneSplitStatsCfgV8 *stats)
 		u32 selectedGeneration = 0;
 		bool selected = false;
 
-		_sprintf(v1Paths[0], "%s/susamune_il_stats_v1_a.bin",
+		_sprintf(v1Paths[0], "%s/moonshine_il_stats_v1_a.bin",
 		         SusamuneCfgStoragePrefix());
-		_sprintf(v1Paths[1], "%s/susamune_il_stats_v1_b.bin",
+		_sprintf(v1Paths[1], "%s/moonshine_il_stats_v1_b.bin",
 		         SusamuneCfgStoragePrefix());
 		for (fileIndex = 0; fileIndex < SUSAMUNE_PB_FILE_COUNT; fileIndex++)
 		{
@@ -4495,9 +4499,9 @@ static void MigrateSplitStatsV8(struct SusamuneSplitStatsPayload *dst,
 
 static void SplitStatsCurrentPaths(void)
 {
-    _sprintf(SplitStatsPaths[0], "%s/susamune_il_stats_v9_a.bin",
+    _sprintf(SplitStatsPaths[0], "%s/moonshine_il_stats_v9_a.bin",
              SusamuneCfgStoragePrefix());
-    _sprintf(SplitStatsPaths[1], "%s/susamune_il_stats_v9_b.bin",
+    _sprintf(SplitStatsPaths[1], "%s/moonshine_il_stats_v9_b.bin",
              SusamuneCfgStoragePrefix());
 }
 

@@ -76,7 +76,7 @@ const char *SusamuneCfgIniPath(void)
 
 const char *SusamuneCfgStoragePrefix(void)
 {
-	return ConfigFatFS ? "1:" : "";
+	return ConfigFatFS ? "1:" MOONSHINE_DATA_ROOT : MOONSHINE_DATA_ROOT;
 }
 
 bool SusamuneCfgStorageAvailable(void)

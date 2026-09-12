@@ -473,7 +473,8 @@ extern "C" s32 onUpdate(JDrama::TDirector* director) {
     SplitEvents::beginFrame();
     TMarioGamePad *const retailPad = gpApplication.mGamePads[0];
     RetailPadInputSnapshot retailInput;
-    const bool suppressPad = menuOwnsRetailPad || PracticeSession::freeCamera() || stateDiskBusy;
+    const bool suppressPad = menuOwnsRetailPad || stateDiskBusy ||
+        (PracticeSession::freeCamera() && !PracticeSession::resumingNativePause());
     if (suppressPad && retailPad)
         suppressRetailPad(retailPad, retailInput);
     int state = director->direct();
@@ -483,7 +484,7 @@ extern "C" s32 onUpdate(JDrama::TDirector* director) {
         gpMarDirector->mCurState = TMarDirector::STATE_NORMAL;
         state = 0;
     }
-    PracticeSession::afterDirect(state, !freeze && !suppressPad);
+    PracticeSession::afterDirect(state, !freeze && !menuOwnsRetailPad && !stateDiskBusy);
     Ghost::afterDirect(state);
     WallkickDisplay::afterDirect(marioActive);
     MovementDisplay::afterDirect(marioActive);

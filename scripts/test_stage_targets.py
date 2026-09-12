@@ -182,8 +182,8 @@ class StageTargetSourceContractTests(unittest.TestCase):
         self.assertNotIn("0x6D40", self.mem2)
 
     def test_kernel_uses_regional_dual_generation_files(self) -> None:
-        self.assertIn('"%s/susamune_stage_targets_%s_a.bin"', self.kernel)
-        self.assertIn('"%s/susamune_stage_targets_%s_b.bin"', self.kernel)
+        self.assertIn('"%s/moonshine_stage_targets_%s_a.bin"', self.kernel)
+        self.assertIn('"%s/moonshine_stage_targets_%s_b.bin"', self.kernel)
         self.assertIn("PbGenerationIsNewer(file.generation", self.kernel)
         self.assertIn("file->version != SUSAMUNE_STAGE_TARGET_VERSION", self.kernel)
         self.assertIn("StageTargetChecksumV1", self.kernel)

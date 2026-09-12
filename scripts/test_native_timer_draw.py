@@ -43,6 +43,7 @@ struct Console {J2DScreen*mMainScreen;};
 struct Director {bool _260;Console*mGCConsole;};
 struct TApplication {enum {CONTEXT_DIRECT_STAGE=5};int mContext;} gpApplication;
 Director*gpMarDirector;
+namespace RetailInput {Director*stageDirector(){return gpApplication.mContext==5?gpMarDirector:nullptr;}}
 struct CreationStyle {unsigned short x,y;u8 scale,textA,bgR,bgG,bgB,bgA,textBrightness,padding;};
 struct Extras {CreationStyle style;bool preview,colors,label,tint;unsigned target;u8 rgb[3];J2DPane*originalPane,*tintPane;
  const CreationStyle&nativeTimerStyle(){return style;} bool editingNativeTimer(){return preview;}

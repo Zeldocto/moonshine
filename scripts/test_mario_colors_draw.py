@@ -36,6 +36,7 @@ struct TMario{M3UModel*mModelData;TMarioCap*mCap;J3DModel*mHandModel2R,*mHandMod
 struct TMarDirector{enum{STATE_GAME_STARTING=2};int _260,mCurState;};
 struct TApplication{enum{CONTEXT_DIRECT_STAGE=5};int mContext;}gpApplication;
 TMarDirector*gpMarDirector;TMario*gpMarioAddress;
+namespace RetailInput {TMarDirector*stageDirector(){return gpApplication.mContext==5?gpMarDirector:nullptr;}}
 struct GXTexObj{int unused;};struct GXColorS10{s16 r,g,b,a;};
 enum{GX_TEVREG2,GX_TEVSTAGE0,GX_TEVSTAGE1,GX_CC_C2,GX_CC_ONE,GX_CC_TEXC,GX_CC_ZERO,GX_CC_CPREV,GX_CC_C0,GX_CC_C1,GX_CC_RASC,GX_CC_KONST,GX_TEV_ADD,GX_TB_ZERO,GX_CS_SCALE_1,GX_CS_SCALE_2,GX_TRUE,GX_TEVPREV,GX_TEXMAP0};
 int customLoads,retailCalls,otherCalls;

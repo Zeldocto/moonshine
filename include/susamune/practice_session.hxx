@@ -77,6 +77,8 @@ void recenterCamera();
 // Timer presentation includes Load holds; menu actions use the manual toggle.
 bool paused();
 bool manualPaused();
+bool nativePaused();
+bool resumingNativePause();
 // An armed hold survives loading and waits for Mario's controls to return.
 bool pausePending();
 bool freeCamera();

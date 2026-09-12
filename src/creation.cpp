@@ -1,4 +1,5 @@
 #include "susamune/creation.hxx"
+#include "susamune/creation_color.hxx"
 
 #include "Dolphin/printf.h"
 #include "SMS/Player/MarioGamePad.hxx"
@@ -12,22 +13,22 @@ namespace {
 typedef JUtility::TColor Color;
 
 const char kOptionNames[] =
-    "Text red\0Text green\0Text blue\0Text opacity\0Text brightness\0"
-    "Background red\0Background green\0Background blue\0"
+    "Text hue\0Text saturation\0Text lightness\0Text opacity\0Text brightness\0"
+    "Background hue\0Background saturation\0Background lightness\0"
     "Background opacity\0Padding";
 const char kElementOptionNames[] =
-    "Element red\0Element green\0Element blue\0Element opacity\0"
+    "Element hue\0Element saturation\0Element lightness\0Element opacity\0"
     "Element brightness";
 
 enum EditOption {
-    OPTION_TEXT_R,
-    OPTION_TEXT_G,
-    OPTION_TEXT_B,
+    OPTION_TEXT_H,
+    OPTION_TEXT_S,
+    OPTION_TEXT_L,
     OPTION_TEXT_A,
     OPTION_TEXT_BRIGHTNESS,
-    OPTION_BG_R,
-    OPTION_BG_G,
-    OPTION_BG_B,
+    OPTION_BG_H,
+    OPTION_BG_S,
+    OPTION_BG_L,
     OPTION_BG_A,
     OPTION_PADDING,
     OPTION_COLOR_MODE,
@@ -40,6 +41,13 @@ enum ConfirmAction {
     CONFIRM_CANCEL,
     CONFIRM_RESET,
 };
+
+// Only one Creation editor is active; keep its HSL choices through target changes.
+constexpr unsigned kHslSlots = 256;
+#if defined(__powerpc__)
+__attribute__((section(".foxtrot.bss")))
+#endif
+CreationColor::Hsl sHsl[kHslSlots + 1];
 
 constexpr u8 kStyleOffsets[] = {
     __builtin_offsetof(CreationStyle, textA),
@@ -103,40 +111,47 @@ int splitTextWidth(const char *text, int size, int *glyphs) {
 }
 
 bool textChannel(const u8 (*textRgb)[3], u16 slots, u16 target,
-                 int channel, u8 *value) {
+                 int channel, u16 *value) {
     if (!textRgb || slots == 0) return false;
     const int first = target ? target - 1 : 0;
-    const int end   = target ? first + 1 : slots;
-    const u8 v = textRgb[first][channel];
+    const int end = target ? first + 1 : slots;
+    const u16 v = sHsl[first].channel[channel];
     for (int i = first + 1; i < end; i++) {
-        if (textRgb[i][channel] != v) return false;
+        if (sHsl[i].channel[channel] != v) return false;
     }
-    *value = v;
+    *value = CreationColor::display(sHsl[first], channel);
     return true;
 }
 
 void adjustTextChannel(u8 (*textRgb)[3], u16 slots, u16 target,
                        int channel, int delta) {
     const int first = target ? target - 1 : 0;
-    const int end   = target ? first + 1 : slots;
-    const u8 value =
-        (u8)clampi((int)textRgb[first][channel] + delta, 0, 255);
-    for (int i = first; i < end; i++) textRgb[i][channel] = value;
+    const int end = target ? first + 1 : slots;
+    const u16 value = CreationColor::adjusted(sHsl[first].channel[channel], channel, delta);
+    for (int i = first; i < end; i++) {
+        sHsl[i].channel[channel] = value;
+        CreationColor::toRgb(sHsl[i], textRgb[i]);
+    }
 }
 
 void resetOption(CreationStyle &style, const CreationStyle &defaults,
                  u8 (*textRgb)[3], const u8 (*defaultRgb)[3],
                  u16 defaultRgbSlots, u16 slots, u8 option, u16 target) {
-    if (option <= OPTION_TEXT_B) {
+    if (option <= OPTION_TEXT_L) {
         const int first = target ? target - 1 : 0;
-        const int end   = target ? first + 1 : slots;
-        for (int i = first; i < end; i++)
-            textRgb[i][option] =
-                defaultRgb[defaultRgbSlots > 1 ? i : 0][option];
-        return;
+        const int end = target ? first + 1 : slots;
+        for (int i = first; i < end; i++) {
+            sHsl[i].channel[option] = CreationColor::fromRgb(
+                defaultRgb[defaultRgbSlots > 1 ? i : 0]).channel[option];
+            CreationColor::toRgb(sHsl[i], textRgb[i]);
+        }
+    } else if (option >= OPTION_BG_H && option <= OPTION_BG_L) {
+        const int channel = option - OPTION_BG_H;
+        sHsl[slots].channel[channel] = CreationColor::fromRgb(&defaults.bgR).channel[channel];
+        CreationColor::toRgb(sHsl[slots], &style.bgR);
+    } else {
+        styleValue(style, option) = styleValue(defaults, option);
     }
-
-    styleValue(style, option) = styleValue(defaults, option);
 }
 
 const char *targetLabel(u16 target, const char *preview, const char *targetNames,
@@ -176,12 +191,13 @@ void CreationEditor::reset() {
     mEditing      = false;
 }
 
+#pragma clang section text=""
 void CreationEditor::begin(CreationStyle *style, u8 (*textRgb)[3],
                            u8 (*backupRgb)[3], u16 textSlots, u16 targetSlots,
                            const char *targetNames, u16 capabilities,
                            u16 *customMask) {
     if (!style || !textRgb || !backupRgb || textSlots == 0 || mEditing) return;
-    if (customMask && textSlots > 16) return;
+    if (textSlots > kHslSlots || (customMask && textSlots > 16)) return;
     mStyle        = style;
     mBackup       = *style;
     mTextRgb      = textRgb;
@@ -193,7 +209,9 @@ void CreationEditor::begin(CreationStyle *style, u8 (*textRgb)[3],
     mTargetSlots  = targetSlots && targetSlots < textSlots ? targetSlots : textSlots;
     for (u16 i = 0; i < mTextSlots; i++) {
         for (int c = 0; c < 3; c++) mBackupRgb[i][c] = mTextRgb[i][c];
+        sHsl[i] = CreationColor::fromRgb(mTextRgb[i]);
     }
+    sHsl[mTextSlots] = CreationColor::fromRgb(&mStyle->bgR);
     mRepeatMask   = 0;
     mOption       = customMask ? OPTION_COLOR_MODE : 0;
     mCapabilities = capabilities;
@@ -203,16 +221,17 @@ void CreationEditor::begin(CreationStyle *style, u8 (*textRgb)[3],
     mEditing      = true;
 }
 
+#pragma clang section text=""
 bool CreationEditor::optionEnabled(u8 option) const {
     if (option == OPTION_COLOR_MODE)
         return mCustomMask && (mCapabilities & CAP_COLOR_MODE);
-    if (option <= OPTION_TEXT_B)
+    if (option <= OPTION_TEXT_L)
         return mCapabilities & CAP_TEXT_COLOR;
     if (option == OPTION_TEXT_A)
         return mCapabilities & CAP_TEXT_ALPHA;
     if (option == OPTION_TEXT_BRIGHTNESS)
         return mCapabilities & CAP_BRIGHTNESS;
-    if (option >= OPTION_BG_R && option <= OPTION_BG_A)
+    if (option >= OPTION_BG_H && option <= OPTION_BG_A)
         return mCapabilities & CAP_BACKGROUND;
     return mCapabilities & CAP_PADDING;
 }
@@ -274,7 +293,7 @@ u8 CreationEditor::update(TMarioGamePad *pad, const CreationStyle &defaults,
             } else if (optionEnabled(mOption)) {
                 resetOption(*mStyle, defaults, mTextRgb, defaultRgb,
                             defaultRgbSlots, mTextSlots, mOption, mTextTarget);
-                if (mOption <= OPTION_TEXT_B && mCustomMask &&
+                if (mOption <= OPTION_TEXT_L && mCustomMask &&
                     (mCapabilities & CAP_RGB_ENABLES_CUSTOM))
                     *mCustomMask |= mTextTarget ? 1u << (mTextTarget - 1)
                                                 : (1u << mTextSlots) - 1u;
@@ -287,7 +306,7 @@ u8 CreationEditor::update(TMarioGamePad *pad, const CreationStyle &defaults,
                     mStyle->scale = defaults.scale;
             }
             mConfirm = CONFIRM_NONE;
-            return UPDATE_CHANGED | (mOption <= OPTION_TEXT_B ? UPDATE_COLOR_CHANGED : 0) |
+            return UPDATE_CHANGED | (mOption <= OPTION_TEXT_L ? UPDATE_COLOR_CHANGED : 0) |
                    (mOption == OPTION_COLOR_MODE ? UPDATE_MODE_CHANGED : 0);
         }
         if (pressed & TMarioGamePad::B) mConfirm = CONFIRM_NONE;
@@ -349,12 +368,17 @@ u8 CreationEditor::update(TMarioGamePad *pad, const CreationStyle &defaults,
         if (delta > 0) *mCustomMask |= mask;
         else *mCustomMask &= ~mask;
         return result | UPDATE_CHANGED | UPDATE_MODE_CHANGED;
-    } else if (mOption <= OPTION_TEXT_B) {
+    } else if (mOption <= OPTION_TEXT_L) {
         adjustTextChannel(mTextRgb, mTextSlots, mTextTarget,
-                           mOption - OPTION_TEXT_R, delta);
+                           mOption - OPTION_TEXT_H, delta);
         if (mCustomMask && (mCapabilities & CAP_RGB_ENABLES_CUSTOM))
             *mCustomMask |= mTextTarget ? 1u << (mTextTarget - 1)
                                         : (1u << mTextSlots) - 1u;
+    } else if (mOption >= OPTION_BG_H && mOption <= OPTION_BG_L) {
+        const int channel = mOption - OPTION_BG_H;
+        sHsl[mTextSlots].channel[channel] = CreationColor::adjusted(
+            sHsl[mTextSlots].channel[channel], channel, delta);
+        CreationColor::toRgb(sHsl[mTextSlots], &mStyle->bgR);
     } else if (mOption == OPTION_PADDING) {
         if (mStyle->padding == 0xff) {
             if (delta > 0) mStyle->padding = 0;
@@ -370,7 +394,7 @@ u8 CreationEditor::update(TMarioGamePad *pad, const CreationStyle &defaults,
         const int hi = mOption == OPTION_TEXT_BRIGHTNESS ? 200 : 255;
         value = (u8)clampi((int)value + delta, lo, hi);
     }
-    return result | UPDATE_CHANGED | (mOption <= OPTION_TEXT_B ? UPDATE_COLOR_CHANGED : 0);
+    return result | UPDATE_CHANGED | (mOption <= OPTION_TEXT_L ? UPDATE_COLOR_CHANGED : 0);
 }
 
 void CreationEditor::draw(Menu *menu, const char *title, const char *preview) const {
@@ -422,25 +446,28 @@ void CreationEditor::draw(Menu *menu, const char *title, const char *preview) co
     }
 
     if (mCapabilities & (CAP_TEXT_COLOR | CAP_BACKGROUND)) {
-        u8 r, g, b;
-        const bool sameR = textChannel(mTextRgb, mTextSlots, mTextTarget, 0, &r);
-        const bool sameG = textChannel(mTextRgb, mTextSlots, mTextTarget, 1, &g);
-        const bool sameB = textChannel(mTextRgb, mTextSlots, mTextTarget, 2, &b);
-        const char *rgbLabel = mTargetNames ? "Element RGB"
-            : (mTextTarget == 0 ? "Text RGB" : "Character RGB");
-        if (sameR && sameG && sameB && (mCapabilities & CAP_BACKGROUND)) {
+        u16 hue, saturation, lightness;
+        const u16 bgH = CreationColor::display(sHsl[mTextSlots], 0);
+        const u16 bgS = CreationColor::display(sHsl[mTextSlots], 1);
+        const u16 bgL = CreationColor::display(sHsl[mTextSlots], 2);
+        const bool sameH = textChannel(mTextRgb, mTextSlots, mTextTarget, 0, &hue);
+        const bool sameS = textChannel(mTextRgb, mTextSlots, mTextTarget, 1, &saturation);
+        const bool sameL = textChannel(mTextRgb, mTextSlots, mTextTarget, 2, &lightness);
+        const char *hslLabel = mTargetNames ? "Element HSL"
+            : (mTextTarget == 0 ? "Text HSL" : "Character HSL");
+        if (sameH && sameS && sameL && (mCapabilities & CAP_BACKGROUND)) {
             snprintf(status, sizeof(status),
-                     "%s:%03u,%03u,%03u   Background RGB:%03u,%03u,%03u",
-                     rgbLabel, r, g, b, mStyle->bgR, mStyle->bgG, mStyle->bgB);
+                     "%s:%03u,%03u,%03u   Background HSL:%03u,%03u,%03u",
+                     hslLabel, hue, saturation, lightness, bgH, bgS, bgL);
         } else if (mCapabilities & CAP_BACKGROUND) {
             snprintf(status, sizeof(status),
-                     "%s: Mixed   Background RGB:%03u,%03u,%03u",
-                     rgbLabel, mStyle->bgR, mStyle->bgG, mStyle->bgB);
-        } else if (sameR && sameG && sameB) {
+                     "%s: Mixed   Background HSL:%03u,%03u,%03u",
+                     hslLabel, bgH, bgS, bgL);
+        } else if (sameH && sameS && sameL) {
             snprintf(status, sizeof(status), "%s:%03u,%03u,%03u",
-                     rgbLabel, r, g, b);
+                     hslLabel, hue, saturation, lightness);
         } else {
-            snprintf(status, sizeof(status), "%s: Mixed", rgbLabel);
+            snprintf(status, sizeof(status), "%s: Mixed", hslLabel);
         }
         menu->drawText(status, 18, infoY, 11, 11,
                        Color(190, 220, 255, 255));
@@ -449,8 +476,8 @@ void CreationEditor::draw(Menu *menu, const char *title, const char *preview) co
 
     if (colorModes) {
         menu->drawText((mCapabilities & CAP_RGB_ENABLES_CUSTOM)
-                           ? "Original: retail colours   Custom: your RGB   RGB edits select Custom"
-                           : "Original: shaded tint   Custom: flat colour   RGB works in both",
+                           ? "Original: retail colours   Custom: your HSL   Colour edits select Custom"
+                           : "Original: shaded tint   Custom: flat colour   HSL works in both",
                        18, infoY, 9, 9, Color(190, 220, 255, 255));
         infoY += 14;
     }
@@ -481,12 +508,16 @@ void CreationEditor::draw(Menu *menu, const char *title, const char *preview) co
                                         : (1u << mTextSlots) - 1u;
             value = !(*mCustomMask & mask) ? "Original" :
                     (*mCustomMask & mask) == mask ? "Custom" : "Mixed";
-        } else if (i <= OPTION_TEXT_B) {
-            u8 v;
+        } else if (i <= OPTION_TEXT_L) {
+            u16 v;
             if (textChannel(mTextRgb, mTextSlots, mTextTarget, i, &v))
-                snprintf(status, sizeof(status), "%u", v);
+                snprintf(status, sizeof(status), i ? "%u pct" : "%u deg", v);
             else
                 value = "Mixed";
+        } else if (i >= OPTION_BG_H && i <= OPTION_BG_L) {
+            const int channel = i - OPTION_BG_H;
+            snprintf(status, sizeof(status), channel ? "%u pct" : "%u deg",
+                     CreationColor::display(sHsl[mTextSlots], channel));
         } else {
             const u8 scalar = styleValue(*mStyle, i);
             if (i == OPTION_PADDING && scalar == 0xff)
@@ -564,6 +595,7 @@ int textWidth(const char *text, int size) {
     return splitTextWidth(text, size, &count);
 }
 
+#pragma clang section text=".foxtrot.text"
 void drawTextLine(Menu *menu, const CreationStyle &style,
                   const u8 (*textRgb)[3], u16 textSlots, const char *text,
                   int x, int y, int size, u16 firstSlot, bool shadow,
@@ -620,6 +652,7 @@ void drawTextLine(Menu *menu, const CreationStyle &style,
     }
 }
 
+#pragma clang section text=""
 void drawTextBox(Menu *menu, const CreationStyle &style,
                  const u8 (*textRgb)[3], u16 textSlots, const char *text,
                  bool rightAlignSlots, u16 selectedSlot) {

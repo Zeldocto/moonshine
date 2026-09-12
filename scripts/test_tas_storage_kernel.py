@@ -74,7 +74,7 @@ class TasStorageKernelTests(unittest.TestCase):
         return value
 
     def path(self, project, leaf):
-        return f'/moonshine_tas/tas_{project:08d}/{leaf}'.encode()
+        return f'/Moonshine data/tas/tas_{project:08d}/{leaf}'.encode()
 
     def file(self, project, leaf):
         size = C.c_uint()

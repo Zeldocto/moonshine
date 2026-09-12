@@ -1,4 +1,5 @@
 #include "susamune/native_timer_layout.hxx"
+#include "susamune/retail_input.hxx"
 
 #include "Dolphin/mem.h"
 #include "JSystem/J2D/J2DScreen.hxx"
@@ -116,7 +117,7 @@ bool beginDraw(J2DScreen *screen) {
         (!preview && !gCreationExtras.nativeTimerColorsEnabled() &&
          style.x == 640 && style.y == 480 && style.scale == 100 &&
          style.textA == 255 && style.textBrightness == 100) || !screen ||
-        gpApplication.mContext != TApplication::CONTEXT_DIRECT_STAGE ||
+        RetailInput::stageDirector() != gpMarDirector ||
         !gpMarDirector || !gpMarDirector->_260 ||
         !gpMarDirector->mGCConsole ||
         gpMarDirector->mGCConsole->mMainScreen != screen) return false;

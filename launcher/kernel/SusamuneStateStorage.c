@@ -5,6 +5,7 @@
 #include "string.h"
 #include "ff_utf8.h"
 #include "susamune/state_storage.h"
+#include "susamune/data_paths.h"
 #include "susamune/mod_bin.h"
 
 extern u32 GAME_ID;
@@ -24,6 +25,12 @@ static struct SusamuneStateArchiveHeader Header;
 static FIL File;
 static DIR Scan;
 static char Directory[64], Path[96], Temporary[96];
+typedef char StateNamePathsFit[
+    sizeof("1:" MOONSHINE_DATA_ROOT MOONSHINE_TAS_DIR
+           "/tas_4294967295/state_4294967295.name1.tmp") <= 72 ? 1 : -1];
+typedef char StateDirectoriesFit[
+    sizeof("1:" MOONSHINE_DATA_ROOT MOONSHINE_TAS_DIR "/tas_4294967295") <=
+        sizeof(Directory) ? 1 : -1];
 static u32 ScanId, ScanSize;
 static char RequestName[SUSAMUNE_STATE_NAME_BYTES];
 static struct SusamuneTasRequest TasContext;
@@ -219,7 +226,7 @@ void SusamuneStateStorageInit(void)
     if (!SusamuneStateGameValid(GAME_ID)) return;
     memset(m, 0, sizeof(*m));
     ConfigId = BootConfigId();
-    _sprintf(Directory, "%s/moonshine_states", SusamuneCfgStoragePrefix());
+    _sprintf(Directory, "%s" MOONSHINE_STATES_DIR, SusamuneCfgStoragePrefix());
     if (SusamuneCfgStorageAvailable()) {
         result = f_mkdir_char(Directory);
         Enabled = result == FR_OK || result == FR_EXIST;
@@ -300,7 +307,7 @@ void SusamuneStateStorageService(void)
         if (m->request.seq == Ack) return;
         Request = m->request;
         TasContext = m->tasRequest;
-        _sprintf(Directory, "%s/moonshine_states", SusamuneCfgStoragePrefix());
+        _sprintf(Directory, "%s" MOONSHINE_STATES_DIR, SusamuneCfgStoragePrefix());
         FileId = Offset = 0;
         if (!Request.seq || !Request.session || !SusamuneTasRequestValid(&TasContext) ||
             (Request.reserved && Request.command != SUSAMUNE_STATE_CMD_READ_WINDOW)) { Finish(SUSAMUNE_STATE_BAD_REQUEST); return; }

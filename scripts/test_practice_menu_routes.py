@@ -133,7 +133,7 @@ extern "C" __declspec(dllexport) int fourthButton(int button,int *out){
 
     def test_each_page_reaches_its_own_actions(self):
         for page, row, action, closes, from_menu in (
-                (1, 0, 5, 1, 0), (1, 1, 1, 1, 1), (1, 6, 6, 0, 0)):
+                (1, 0, 5, 1, 0), (1, 1, 1, 1, 1), (1, 7, 6, 0, 0)):
             self.assertEqual(self.route(page, row),
                              (1, [action, closes, from_menu, row, -1, 0]))
 
@@ -151,7 +151,7 @@ extern "C" __declspec(dllexport) int fourthButton(int button,int *out){
                 self.assertEqual(list(out)[2:], [0, row, 0, action])
 
     def test_speed_and_direction_adjust_both_ways_without_closing(self):
-        for row in (2, 3, 4, 5):
+        for row in (2, 3, 4, 5, 6):
             for nav, direction in ((4, -1), (8, 1)):
                 events, out = self.route(1, row, nav, 0)
                 self.assertEqual(events, 1)
@@ -160,7 +160,8 @@ extern "C" __declspec(dllexport) int fourthButton(int button,int *out){
 
     def test_x_shines_exact_camera_setting_without_adjusting_rebinding_or_closing(self):
         settings = ("SETTING_FREE_CAMERA_SPEED", "SETTING_FREE_CAMERA_STRAFE_REVERSE",
-                    "SETTING_FREE_CAMERA_SENSITIVITY", "SETTING_FREE_CAMERA_HIDE_HUD")
+                    "SETTING_FREE_CAMERA_SENSITIVITY", "SETTING_FREE_CAMERA_HIDE_HUD",
+                    "SETTING_FREE_CAMERA_SMOOTHING")
         for row, setting in enumerate(settings, 2):
             with self.subTest(row=row):
                 self.assertEqual(self.route(1, row, held=0x400),
@@ -178,7 +179,7 @@ extern "C" __declspec(dllexport) int fourthButton(int button,int *out){
             self.assertEqual(list(out), [1, 0, 0, 0])
 
     def test_navigation_stays_within_each_page(self):
-        for page, last in ((1, 6),):
+        for page, last in ((1, 7),):
             self.assertEqual(self.route(page, 0, 1, 0)[1][3], last)
             self.assertEqual(self.route(page, last, 2, 0)[1][3], 0)
 

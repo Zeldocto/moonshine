@@ -478,7 +478,7 @@ class StorageEnvelopeTests(unittest.TestCase):
     def test_share_paths_are_bounded_and_friendly(self) -> None:
         self.assertEqual(
             storage.import_directory(),
-            "/susamune_ghosts/import",
+            "/Moonshine data/ghosts/import",
         )
 
         raw = build_ghost(route_episode=3)
@@ -493,7 +493,7 @@ class StorageEnvelopeTests(unittest.TestCase):
         )
         self.assertEqual(
             export_path,
-            "/susamune_ghosts/share/jp/p0/"
+            "/Moonshine data/ghosts/share/jp/p0/"
             f"2026_08_15_BH4_{compact}"
             f"[{ghost['file_checksum']:08X}].smsghost",
         )

@@ -55,7 +55,7 @@ typedef u32 UINT;
 #define true 1
 #define false 0
 #define SUSAMUNE_PB_FILE_COUNT 2
-#define SUSAMUNE_PB_PATH_SIZE 40
+#define SUSAMUNE_PB_PATH_SIZE 64
 #define FR_OK 0
 #define FR_NO_FILE 4
 #define FR_NO_PATH 5
@@ -81,7 +81,7 @@ static int contains(const char *s,const char *part) {
 static int _sprintf(char *out,const char *format,const char *prefix) {
     int n=0;format+=2;while(*prefix)out[n++]=*prefix++;while(*format)out[n++]=*format++;out[n]=0;return n;
 }
-static const char *SusamuneCfgStoragePrefix(void){return "sd:";}
+static const char *SusamuneCfgStoragePrefix(void){return "1:/Moonshine data";}
 struct TestFile { u32 size; u8 data[sizeof(struct SusamuneSplitStatsFile)]; };
 static struct TestFile disk[4];
 static int readFailure=-1, writeFailure=-1, legacyWrites;

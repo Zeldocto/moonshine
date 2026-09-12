@@ -507,8 +507,8 @@ bool SusamuneIniNeedsWrite(void)
 
 bool SusamuneIniWritable(const char *device)
 {
-	char path[32];
-	char probePath[32];
+	char path[64];
+	char probePath[64];
 	FIL f;
 	FILINFO info;
 	FRESULT ret;
@@ -533,7 +533,7 @@ bool SusamuneIniWritable(const char *device)
 	// FatFS writes through a RAM cache, so opening a file is not a write test.
 	for (i = 0; i < 4; i++)
 	{
-		snprintf(probePath, sizeof(probePath), "%s:/.susa-wr%u.tmp", device, i);
+		snprintf(probePath, sizeof(probePath), "%s:" MOONSHINE_DATA_ROOT "/.moonshine-wr%u.tmp", device, i);
 		ret = f_open_char(&f, probePath, FA_WRITE | FA_CREATE_NEW);
 		if (ret != FR_EXIST)
 			break;
@@ -563,7 +563,7 @@ bool SusamuneIniWritable(const char *device)
 
 void SusamuneIniLoad(const char *device)
 {
-	char  path[32];
+	char  path[64];
 	FIL   f;
 	char *buf;
 	UINT  read = 0;
@@ -579,20 +579,20 @@ void SusamuneIniLoad(const char *device)
 	ret = RecoverIniFile(path);
 	if (ret != FR_OK)
 	{
-		gprintf("Susamune: could not recover %s (%d), using defaults\n",
+		gprintf("Moonshine: could not recover %s (%d), using defaults\n",
 			path, ret);
 		return;
 	}
 	ret = f_open_char(&f, path, FA_READ | FA_OPEN_EXISTING);
 	if (ret == FR_NO_FILE || ret == FR_NO_PATH)
 	{
-		gprintf("Susamune: no %s, using defaults\n", path);
+		gprintf("Moonshine: no %s, using defaults\n", path);
 		LoadSafe = true;
 		return;
 	}
 	if (ret != FR_OK)
 	{
-		gprintf("Susamune: could not read %s (%d), settings disabled\n",
+		gprintf("Moonshine: could not read %s (%d), settings disabled\n",
 			path, ret);
 		return;
 	}
@@ -601,21 +601,21 @@ void SusamuneIniLoad(const char *device)
 	if (fileSize >= SUSA_INI_BUF_SIZE)
 	{
 		(void)f_close(&f);
-		gprintf("Susamune: %s is too large, settings disabled\n", path);
+		gprintf("Moonshine: %s is too large, settings disabled\n", path);
 		return;
 	}
 	buf = (char*)malloc(SUSA_INI_BUF_SIZE);
 	if (buf == NULL)
 	{
 		(void)f_close(&f);
-		gprintf("Susamune: no memory to read %s, settings disabled\n", path);
+		gprintf("Moonshine: no memory to read %s, settings disabled\n", path);
 		return;
 	}
 	ret = f_read(&f, buf, SUSA_INI_BUF_SIZE - 1, &read);
 	closeRet = f_close(&f);
 	if (ret != FR_OK || read != fileSize || closeRet != FR_OK)
 	{
-		gprintf("Susamune: incomplete read of %s, settings disabled\n", path);
+		gprintf("Moonshine: incomplete read of %s, settings disabled\n", path);
 		free(buf);
 		return;
 	}
@@ -627,7 +627,7 @@ void SusamuneIniLoad(const char *device)
 
 int SusamuneIniSave(const char *device)
 {
-	char  path[32];
+	char  path[64];
 	char  tempPath[SUSA_INI_TRANSACTION_PATH_MAX];
 	char  backupPath[SUSA_INI_TRANSACTION_PATH_MAX];
 	FIL   f;

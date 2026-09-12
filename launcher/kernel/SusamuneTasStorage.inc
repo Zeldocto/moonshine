@@ -12,6 +12,8 @@ static struct TasDeleted TasTombstone;
 static bool TasValid[2];
 static u32 TasLatest, TasId, TasPart, TasRemoveIndex;
 static char TasRoot[32];
+typedef char TasRootFits[
+    sizeof("1:" MOONSHINE_DATA_ROOT MOONSHINE_TAS_DIR) <= sizeof(TasRoot) ? 1 : -1];
 
 static u32 TasPartId(const struct SusamuneTasManifest *project, u32 part)
 {
@@ -52,7 +54,7 @@ static bool TasTapeMetadataValid(bool projectBound)
 
 static void TasDirectory(u32 id)
 {
-    _sprintf(TasRoot, "%s/moonshine_tas", SusamuneCfgStoragePrefix());
+    _sprintf(TasRoot, "%s" MOONSHINE_TAS_DIR, SusamuneCfgStoragePrefix());
     _sprintf(Directory, "%s/tas_%08u", TasRoot, id);
 }
 

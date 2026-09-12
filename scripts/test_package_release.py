@@ -101,6 +101,25 @@ class ReleasePackagingTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 release.evidence_path(name)
 
+    def test_receipts_accept_root_aliases_without_accepting_outside_files(self):
+        result = self.put("build/run.json", b'{"passed":true}')
+        anchor = self.root / "alias-anchor"
+        anchor.mkdir()
+        # Reproduce canonical file paths paired with an unresolved root, as in Windows TEMP.
+        with patch.object(release, "ROOT", anchor / ".."):
+            with self.subTest(operation="record"):
+                self.assertEqual(release.record(result), {
+                    "path": "build/run.json", "bytes": 15,
+                    "sha256": release.sha(b'{"passed":true}')})
+            with self.subTest(operation="evidence"):
+                self.assertEqual(release.evidence_path("build/run.json"), result.resolve())
+            with tempfile.TemporaryDirectory(prefix="moonshine-outside-") as outside:
+                other = Path(outside) / "run.json"
+                other.write_bytes(result.read_bytes())
+                for operation in (release.relative, release.record):
+                    with self.subTest(operation=operation.__name__), self.assertRaises(ValueError):
+                        operation(other)
+
     def test_iso_proof_binds_all_segments_hooks_and_japanese_extent(self):
         data, asset = fake_patch(), b"validated asset"
         source, target, checksum = struct.unpack("<III", data[-12:])
@@ -143,26 +162,43 @@ class ReleasePackagingTests(unittest.TestCase):
                     prefix+"boot.dol": b"same binary", prefix+"language.txt": (kwargs["language"]+"\n").encode()}
         with patch.object(release.package_launcher, "launcher_files", side_effect=app):
             packages = release.archive_contents(args, {"build_checksum":"DEADBEEF"}, patches)
-        self.assertEqual(len(packages), 4)
+        self.assertEqual(set(packages), {
+            "Moonshine_ENGLISH-MENUS_Launcher_V2.3.1_US-PAL-JP.zip",
+            "Moonshine_JAPANESE-MENUS_Launcher_V2.3.1_US-PAL-JP.zip",
+            "Moonshine_ENGLISH-MENUS_Dolphin_V2.3.1_US-PAL-JP.zip",
+            "Moonshine_JAPANESE-MENUS_Dolphin_V2.3.1_JP.zip",
+        })
         for name, (language, kind, files) in packages.items():
-            self.assertIn("日本語版" if language == "ja" else "English", name)
+            self.assertTrue(name.isascii())
             self.assertFalse(any("FOXTROT" in n or "TESTING" in n or "RC1" in n for n in files))
             base = prefix if kind == "launcher" else "moonshine_dolphin/"
             self.assertEqual(files[base+"language.txt"], (language+"\n").encode())
             for entry in release.FILES:
                 self.assertIn(base+entry, files)
             if kind == "launcher":
-                self.assertEqual("Moonshine_Theme/background.png" in files, language == "ja")
+                self.assertEqual("Moonshine data/theme/background.png" in files, language == "ja")
                 self.assertIn("README.md", files)
+                data_files = {n for n in files if n.startswith("Moonshine data/")}
+                self.assertEqual(data_files, {"Moonshine data/theme/background.png"} if language == "ja" else set())
+                self.assertFalse(any(n.startswith("Moonshine_Theme/") for n in files))
+                self.assertIn("/Moonshine data/moonshine.ini", files["README.md"].decode())
             else:
                 actual = {n.split("/")[-1] for n in files if n.endswith(".bps")}
                 self.assertEqual(actual, {"moonshine_jp_ja.bps"} if language == "ja" else
                                  {"moonshine_jp.bps", "moonshine_us.bps", "moonshine_pal.bps"})
-                self.assertNotIn("Moonshine_Theme/background.png", files)
-            if language == "ja":
-                readme = files["README.md" if kind == "launcher" else base+"README.md"].decode()
+                self.assertNotIn("Moonshine data/theme/background.png", files)
+            readme = files["README.md" if kind == "launcher" else base+"README.md"].decode()
+            if language == "en":
+                self.assertIn("Supports US, PAL and JP Sunshine, with English Moonshine menus in all three regions", readme)
+                self.assertIn("retail game's language is unchanged", readme)
+            else:
                 self.assertIn("日本語版", readme)
                 self.assertIn("してください", readme)
+                if kind == "launcher":
+                    self.assertIn("Supports US, PAL and JP Sunshine", readme)
+                    self.assertIn("Japanese on JP and English on US/PAL", readme)
+                else:
+                    self.assertIn("For JP Sunshine only, with Japanese Moonshine menus", readme)
 
     def test_zip_verifier_rejects_extra_duplicate_or_changed_files(self):
         path = self.root/"日本語版.zip"

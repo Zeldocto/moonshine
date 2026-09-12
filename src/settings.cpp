@@ -54,6 +54,7 @@ enum ChoiceSet {
     CHOICES_NATIVE_Y,
     CHOICES_NATIVE_SCALE,
     CHOICES_FREE_CAMERA_SPEED,
+    CHOICES_CAMERA_SMOOTHING,
     CHOICES_COUNT,
 };
 
@@ -87,7 +88,9 @@ const char kChoiceLabels[] =
     "Pattern 1\0Pattern 2\0Pattern 3\0Pattern 4\0"
     "Both\0Fruit\0Coins\0Wireframe\0Transparent\0Solid\0"
     "All enemies\0Eely teeth only\0Ghost\0Both ghosts\0PB\0SOB\0"
-    "0.25x\0" "0.5x\0" "1x\0" "2x\0" "4x";
+    "0.25x\0" "0.5x\0" "1x\0" "2x\0" "4x\0"
+    "0.1 s\0" "0.2 s\0" "0.3 s\0" "0.4 s\0" "0.6 s\0" "0.7 s\0"
+    "0.8 s\0" "0.9 s\0" "1.1 s\0" "1.2 s\0" "1.3 s\0" "1.4 s\0" "1.5 s";
 
 const u8 kChoiceMap[] = {
     0, 1,              // bool
@@ -114,14 +117,18 @@ const u8 kChoiceMap[] = {
     0, 55, 56, 53,        // split comparison
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // numeric presentation values
     57, 58, 59, 60, 61,  // free camera speed
+    0, 62, 63, 64, 65, 13, 66, 67, 68, 69, 14, 70, 71, 72, 73, 74, // smoothing
 };
 const u8 kChoiceFirst[CHOICES_COUNT + 1] = {
     0, 2, 5, 9, 12, 15, 21, 24, 27, 31, 34, 36, 39, 42, 44, 50, 52, 57,
-    61, 65, 67, 70, 74, 107, 132, 143, 148
+    61, 65, 67, 70, 74, 107, 132, 143, 148, 164
 };
 
-static_assert(sizeof(kChoiceMap) / sizeof(kChoiceMap[0]) == 148,
+static_assert(sizeof(kChoiceMap) / sizeof(kChoiceMap[0]) == 164,
               "choice map size changed");
+static_assert(SETTING_FREE_CAMERA_SMOOTHING == SETTING_TAS_BANNER + 1 &&
+              SETTING_COUNT <= SUSAMUNE_CFG_TOTAL_SETTINGS,
+              "camera smoothing must append within the existing settings wire");
 static_assert(SETTING_HELMET_APPEARANCE == SETTING_GHOST_OPACITY + 1 &&
                   SETTING_CAP_APPEARANCE == SETTING_HELMET_APPEARANCE + 1 &&
                   SETTING_SHADES_APPEARANCE == SETTING_CAP_APPEARANCE + 1 &&

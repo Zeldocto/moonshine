@@ -6,11 +6,11 @@
 /**
  * Run the susamune launcher menu. Returns once the user has launched a game,
  * with ncfg filled in (game path, storage device, and the four Nintendont
- * options that live in susamune.ini). Does not return otherwise -- Home exits
+ * options that live in moonshine.ini). Does not return otherwise -- Home exits
  * to the loader from inside.
  *
  * @param launcherDev "sd" or "usb": the device the launcher was run from, and
- *                    therefore the one susamune.ini lives on.
+ *                    therefore the one moonshine.ini lives on.
  * @param canSave     False if that device could not be written to; the menu
  *                    says so and still lets the user launch.
  */

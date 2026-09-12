@@ -15,6 +15,7 @@ file-header operation or 16 KiB of payload I/O per DI-idle service pass.
 #include "ff_utf8.h"
 
 #include "susamune/ghost_format.h"
+#include "susamune/data_paths.h"
 #include "susamune/ghost_storage.h"
 #include "susamune/mod_bin.h"
 
@@ -24,7 +25,7 @@ extern u32 GAME_ID;
 #define GHOST_PATH_SIZE  128u
 
 typedef char ImportGhostPathFits[
-	2u + sizeof("/susamune_ghosts/import/") - 1u +
+	sizeof("1:" MOONSHINE_DATA_ROOT MOONSHINE_GHOSTS_DIR "/import/") - 1u +
 	        SUSAMUNE_GHOST_IMPORT_LEAF_SIZE <= GHOST_PATH_SIZE
 		? 1 : -1];
 
@@ -913,20 +914,20 @@ static bool GenerationIsNewer(u32 candidate, u32 current)
 
 static void BuildGhostPath(char *path, u16 profile, u32 slot, u8 bank)
 {
-	_sprintf(path, "%s/susamune_ghosts/%s/p%u/g%02u%c.sgh",
+	_sprintf(path, "%s" MOONSHINE_GHOSTS_DIR "/%s/p%u/g%02u%c.sgh",
 	         SusamuneCfgStoragePrefix(), GhostRegion, profile, slot,
 	         bank == 0 ? 'a' : 'b');
 }
 
 static void BuildImportDirectory(char *path)
 {
-	_sprintf(path, "%s/susamune_ghosts/%s",
+	_sprintf(path, "%s" MOONSHINE_GHOSTS_DIR "/%s",
 	         SusamuneCfgStoragePrefix(), SUSAMUNE_GHOST_IMPORT_DIRECTORY);
 }
 
 static void BuildImportPath(char *path, const char *leaf)
 {
-	_sprintf(path, "%s/susamune_ghosts/%s/%s",
+	_sprintf(path, "%s" MOONSHINE_GHOSTS_DIR "/%s/%s",
 	         SusamuneCfgStoragePrefix(), SUSAMUNE_GHOST_IMPORT_DIRECTORY,
 	         leaf);
 }
@@ -1031,7 +1032,7 @@ static void BuildExportPath(char *path, u16 profile, const u8 *header)
 	BuildExportRoute(route, header);
 	BuildCompactTime(time, ReadBe32(header + 64));
 	_sprintf(path,
-	         "%s/susamune_ghosts/%s/%s/p%u/"
+	         "%s" MOONSHINE_GHOSTS_DIR "/%s/%s/p%u/"
 	         "%04u_%02u_%02u_%s_%s[%08X]%s",
 	         SusamuneCfgStoragePrefix(), SUSAMUNE_GHOST_SHARE_DIRECTORY,
 	         GhostRegion, profile, year, month, day, route, time,
@@ -1439,7 +1440,7 @@ static void PersonalScanOpenPass(void)
 {
 	char path[GHOST_PATH_SIZE];
 	int ret;
-	_sprintf(path, "%s/susamune_ghosts/%s/p%u",
+	_sprintf(path, "%s" MOONSHINE_GHOSTS_DIR "/%s/p%u",
 	         SusamuneCfgStoragePrefix(), GhostRegion, Request.profile);
 	ret = f_opendir_char(&ImportDir, path);
 	if (ret != FR_OK)

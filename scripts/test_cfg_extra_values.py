@@ -25,12 +25,16 @@ class ExtraSettingValuesTests(unittest.TestCase):
 #include "susamune/settings.hxx"
 #undef private
 #include "susamune/susamune_cfg.h"
+#include "susamune/packed_text.hxx"
 #define SUSAMUNE_GAME_VERSION 2
+int snprintf(char*,__SIZE_TYPE__,const char*,...){return 0;}
 extern "C" void*memcpy(void*d,const void*s,__SIZE_TYPE__ n){u8*a=(u8*)d;const u8*b=(const u8*)s;while(n--)*a++=*b++;return d;}
 extern "C" void*memset(void*d,int c,__SIZE_TYPE__ n){u8*a=(u8*)d;while(n--)*a++=(u8)c;return d;}
 '''
         code += settings[settings.index('namespace {'):settings.index('Settings &gSettings')]
         code += function(settings, 'Settings::set')
+        code += function(settings, 'Settings::cycle')
+        code += function(settings, 'Settings::valueLabel')
         defaults = function(settings, 'Settings::resetDefaults')
         code += 'void Settings::resetDefaults(){' + defaults[defaults.index('    for (int i'):]
         adopt = function(settings, 'Settings::adopt')
@@ -54,6 +58,9 @@ API void stage(){settings.stageInto(&cfg);}
 API unsigned byteAt(unsigned index){return ((u8*)&cfg)[index];}
 API unsigned size(){return sizeof(cfg);}
 API unsigned count(){return cfg.count;}
+API unsigned smoothingId(){return SETTING_FREE_CAMERA_SMOOTHING;}
+API void cycle(unsigned index,int direction){settings.cycle((SettingId)index,direction);}
+API const char*label(unsigned index){return settings.valueLabel((SettingId)index);}
 API unsigned cardRoundtrip(unsigned oldCount){
  memset(&record,0,sizeof(record));record.magic=kRecordMagic;record.version=kRecordVersion;
  record.payloadSize=kRecordPayloadSize;record.gameVersion=SUSAMUNE_GAME_VERSION;
@@ -68,11 +75,13 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
         path.write_text(code)
         result = subprocess.run([str(compiler),'--target=x86_64-pc-windows-msvc','-shared','-nostdlib',
             '-fuse-ld=lld','-Wl,/noentry','-O2','-fno-builtin','-mno-stack-arg-probe',
-            '-I',str(ROOT/'include'),'-I',str(ROOT/'src'),str(path),'-o',str(path.with_suffix('.dll'))],
+            '-I',str(ROOT/'include'),'-I',str(ROOT/'src'),str(path),
+            str(ROOT/'src/packed_text.cpp'),'-o',str(path.with_suffix('.dll'))],
             capture_output=True,text=True)
         if result.returncode:
             raise RuntimeError(result.stdout+result.stderr)
         cls.lib = C.CDLL(str(path.with_suffix('.dll')))
+        cls.lib.label.restype = C.c_char_p
         cls.addClassCleanup(lambda:C.windll.kernel32.FreeLibrary(C.c_void_p(cls.lib._handle)))
 
     def test_wire_boundaries_preserve_bind_and_ack_cache_lines(self):
@@ -114,7 +123,7 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
         self.lib.set(128, 4)
         self.lib.set(129, 1)
         self.lib.stage()
-        self.assertEqual(self.lib.count(), 139)
+        self.assertEqual(self.lib.count(), 140)
         self.assertEqual([self.lib.read(i) for i in (128,129)], [4,1])
         self.assertEqual(bytes(self.lib.byteAt(i) for i in range(192,320)), b'\xa5'*128)
 
@@ -147,10 +156,33 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
         self.assertEqual(self.lib.get(138), 1)
         self.lib.set(138, 0)
         self.lib.stage()
-        self.assertEqual(self.lib.count(), 139)
+        self.assertEqual(self.lib.count(), 140)
         self.assertEqual(self.lib.read(138), 0)
         self.assertEqual(self.lib.cardRoundtrip(0), 1)
         self.assertEqual(self.lib.get(138), 0)
+
+    def test_camera_smoothing_appends_off_default_and_persists_all_durations(self):
+        setting = self.lib.smoothingId()
+        self.assertEqual(setting, 139)
+        self.lib.reset(139)
+        self.lib.write(setting, 15)
+        self.lib.adopt()
+        self.assertEqual(self.lib.get(setting), 0)
+        for value in range(16):
+            self.lib.set(setting, value)
+            expected = 'Off' if not value else '1 s' if value == 10 else f'{value / 10:.1f} s'
+            self.assertEqual(self.lib.label(setting).decode(), expected)
+            self.assertEqual(self.lib.cardRoundtrip(0), 1)
+            self.assertEqual(self.lib.get(setting), value)
+            self.lib.stage()
+            self.assertEqual(self.lib.read(setting), value)
+            self.assertEqual(self.lib.byteAt(29), value)
+        self.lib.cycle(setting, 1)
+        self.assertEqual(self.lib.get(setting), 0)
+        self.lib.cycle(setting, -1)
+        self.assertEqual(self.lib.get(setting), 15)
+        self.lib.set(setting, 16)
+        self.assertEqual(self.lib.get(setting), 0)
 
     def test_header_publication_and_kernel_ack_remain_on_their_owned_lines(self):
         settings = (ROOT/'src/settings.cpp').read_text()

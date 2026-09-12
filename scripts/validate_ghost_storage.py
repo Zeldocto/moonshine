@@ -193,11 +193,11 @@ def personal_slot_is_live(slot: int) -> bool:
 def share_directory(region: str, profile: int) -> str:
     _require(region in ghost_format.REGION_NAMES.values(), "invalid region")
     _require(0 <= profile < 4, "invalid profile")
-    return f"/susamune_ghosts/{SHARE_DIRECTORY}/{region}/p{profile}"
+    return f"/Moonshine data/ghosts/{SHARE_DIRECTORY}/{region}/p{profile}"
 
 
 def import_directory() -> str:
-    return f"/susamune_ghosts/{IMPORT_DIRECTORY}"
+    return f"/Moonshine data/ghosts/{IMPORT_DIRECTORY}"
 
 
 def validate_import_leaf(leaf: str) -> str:

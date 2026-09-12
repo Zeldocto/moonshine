@@ -17,6 +17,7 @@ FIXTURE = r'''
 #include "susamune/practice_session.hxx"
 #include "susamune/state_archive_profile.hxx"
 #include "susamune/state_pool_memory.h"
+#include "susamune/state_live_video.hxx"
 #define private public
 #include "susamune/savestate.hxx"
 #undef private
@@ -33,6 +34,7 @@ static Menu*gMenu=&menu;
 static u32 policyCalls,practiceCalls;
 static bool ownReplay;
 static u8 take[16],ordinary[16];
+static StateLiveVideo::Range sLiveVideo = {};
 namespace PracticeSession{
 bool savestateRestoreSpans(const SavestateData&data,StateCodec::WriteSpan(&out)[kSavestateSpanCount]){
  out[0]={take,0};out[1]={take,0};return data.version==1;}
@@ -49,7 +51,7 @@ extern "C" {
 __declspec(dllexport) void reset(){
  memset(&sPool,0,sizeof(sPool));memset(sSlots,0,sizeof(sSlots));memset(&menu,0,sizeof(menu));
  memset(&manager,0,sizeof(manager));memset(take,0x55,sizeof(take));memset(ordinary,0x55,sizeof(ordinary));
- confirmations=ownReplay=false;policyCalls=practiceCalls=0;
+ confirmations=ownReplay=false;policyCalls=practiceCalls=0;sLiveVideo={0,0};
  for(u32 i=0;i<3;++i){sPool.slots[i]={i*64,64};StoredState&s=sSlots[i];
   s.header.magic=kSnapshotMagic;s.header.version=kSnapshotVersion;s.header.game_version=SUSAMUNE_GAME_VERSION;
   s.header.area_id=(u8)(i+2);s.header.episode_id=(u8)(i+3);s.generation=i+101;s.packedSize=64;
@@ -71,6 +73,9 @@ __declspec(dllexport) u32 value(u32 field){switch(field){case 0:return menu.call
 __declspec(dllexport) u32 copy(u32 replay,u32 durable,u32 isTake){
  const u8 input[16]={9};ownReplay=replay!=0;void*dest=isTake?take:ordinary;
  copyStateBytes(durable?(void*)1:0,dest,input,16);return *(u8*)dest;}
+__declspec(dllexport) void protectVideo(u32 offset,u32 size){
+ sLiveVideo={(__UINTPTR_TYPE__)(ordinary+offset),(__UINTPTR_TYPE__)(ordinary+offset+size)};}
+__declspec(dllexport) u32 byte(u32 offset){return ordinary[offset];}
 }
 '''
 
@@ -86,7 +91,7 @@ class SavestateCheckpointContractTests(unittest.TestCase):
         production = SOURCE.read_text()
         stored = production[production.index('const u32 kSnapshotMagic'):production.index('StateSlotPool sPool;')]
         methods = ''.join(function_source(SOURCE, method) for method in (
-            'u32 metadataTag(', 'bool validStore()', 'void copyStateBytes(',
+            'u32 metadataTag(', 'bool validStore()', 'void copyOwnedStateBytes(', 'void copyStateBytes(',
             'SavestateManager::SlotInfo SavestateManager::slotInfo(',
             'bool SavestateManager::practiceData(', 'void SavestateManager::feedback('))
         cls.libs = {}
@@ -147,6 +152,18 @@ class SavestateCheckpointContractTests(unittest.TestCase):
                         self.assertEqual(lib.copy(replay, durable, take), 0x55 if skipped else 9)
                         self.assertEqual(lib.value(3), 1)
                         self.assertEqual(lib.value(2), int(durable and not skipped))
+
+    def test_live_video_skip_keeps_owner_filter_on_both_remaining_sides(self):
+        for region, lib in self.libs.items():
+            for durable in (0, 1):
+                with self.subTest(region=region, durable=durable):
+                    lib.reset()
+                    lib.protectVideo(3, 7)
+                    lib.copy(0, durable, 0)
+                    self.assertEqual([lib.byte(i) for i in range(16)],
+                                     [9, 0, 0] + [0x55] * 7 + [0] * 6)
+                    self.assertEqual(lib.value(2), 2 * durable)
+                    self.assertEqual(lib.value(3), 1)
 
     def test_practice_sidecar_is_validated_before_restore_and_adopted_after_cleanup(self):
         save = function_source(SOURCE, 'bool SavestateManager::saveSlotExplicit(')

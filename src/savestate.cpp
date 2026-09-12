@@ -81,6 +81,7 @@
 #include "susamune/state_pool_runtime.hxx"
 #include "susamune/state_storage.hxx"
 #include "susamune/state_archive_profile.hxx"
+#include "susamune/state_live_video.hxx"
 #include "Dolphin/CARD.h"
 #include "Dolphin/GX.h"
 #include "Dolphin/mem.h"
@@ -132,6 +133,33 @@ static const u32 kSnapshotReservedSize = SUSAMUNE_MEM2_SNAPSHOT_SIZE;
 // ---------------------------------------------------------------------
 
 namespace {
+
+#pragma clang section text=".foxtrot.text" bss=".foxtrot.bss"
+extern "C" unsigned char ActivePlayer[];
+extern "C" unsigned int THPPlayerCalcNeedMemory();
+StateLiveVideo::Range sLiveVideo = {};
+StateLiveVideo::Range sVideoReadRing = {};
+
+bool captureLiveVideo() {
+    // THPPlayer's threads and queues stay live; its heap buffer must stay with them.
+    const u32 *player = reinterpret_cast<const u32 *>(ActivePlayer);
+    sVideoReadRing = {0, 0};
+    const u32 open = player[0xA0 / 4];
+    if (!open) return StateLiveVideo::bufferRange(0, 0, 0, 0, sLiveVideo);
+    const u32 onMemory = player[0xB0 / 4];
+    if (onMemory > 1) return false;
+    if (!StateLiveVideo::bufferRange(open, player[(onMemory ? 0xB4 : 0x100) / 4],
+        player[0x9C / 4], THPPlayerCalcNeedMemory(), sLiveVideo)) return false;
+    return onMemory || StateLiveVideo::readRingRange(player[0x44 / 4], sLiveVideo, sVideoReadRing);
+}
+
+void invalidateVideoReadBuffer() {
+    // Saving may read a DVD buffer while DMA fills it. Keep dirty decoder work intact.
+    if (sVideoReadRing.last > sVideoReadRing.first)
+        DCInvalidateRange(reinterpret_cast<void *>(sVideoReadRing.first),
+                          sVideoReadRing.last - sVideoReadRing.first);
+}
+#pragma clang section text="" bss=""
 
 // A range is captured unconditionally when gate == kNoGate; otherwise it is
 // only captured while the named setting is enabled. This lets a menu toggle
@@ -780,10 +808,15 @@ bool archiveProjectCandidateMatches(const SusamuneStateArchiveHeader &file) {
     return raw == sCandidate.rawSize;
 }
 
-void copyStateBytes(void *profile, void *destination, const void *source, unsigned int size) {
-    if (PracticeSession::copySavestateBytes(destination, source, size)) return;
+#pragma clang section text=".foxtrot.text"
+void copyOwnedStateBytes(void *profile, void *destination, const void *source, unsigned int size) {
     if (profile) StateArchiveProfile::copyGameBytes(profile, destination, source, size);
     else memcpy(destination, source, size);
+}
+
+void copyStateBytes(void *profile, void *destination, const void *source, unsigned int size) {
+    if (PracticeSession::copySavestateBytes(destination, source, size)) return;
+    StateLiveVideo::copyExcept(sLiveVideo, profile, destination, source, size, copyOwnedStateBytes);
 }
 
 #pragma clang section text=".foxtrot.text"
@@ -1266,7 +1299,7 @@ void SavestateManager::updateDisk() {
         PracticeSession::cancelLoadHold();
     }
     else if (result.command == SUSAMUNE_STATE_CMD_EXPORT) sDiskStatus = projectTransfer ?
-        "TAS checkpoint saved" : "State saved in /moonshine_states";
+        "TAS checkpoint saved" : "State saved in Moonshine data/states";
     else if (result.command == SUSAMUNE_STATE_CMD_CATALOG) sDiskStatus = "SD states ready";
     else if (result.command == SUSAMUNE_STATE_CMD_RENAME) {
         sDiskStatus = "SD state renamed";
@@ -1396,6 +1429,13 @@ bool SavestateManager::saveSlotExplicit(u32 slot, bool forceRng, bool omitPracti
     // DMA doesn't buzz; restored just before interrupts come back.
     bool dma = muteAudioDma();
 
+    if (!captureLiveVideo()) {
+        unmuteAudioDma(dma);
+        OSRestoreInterrupts(ints);
+        sBusy = false;
+        feedback("E:video", "Video player busy - try again");
+        return false;
+    }
     memset(&sCandidate, 0, sizeof(sCandidate));
     SavestateHeader *h = &sCandidate.header;
     h->magic        = 0; // committed at end as a torn-write guard
@@ -1454,6 +1494,7 @@ bool SavestateManager::saveSlotExplicit(u32 slot, bool forceRng, bool omitPracti
     StateCodec::ReadSpan ghostSource[Ghost::kSavestateSpanCount];
     if (!Ghost::captureSavestate(sCandidate.ghost, ghostSource)) {
         rebaseMissionStopwatch(h->save_time);
+        invalidateVideoReadBuffer();
         unmuteAudioDma(dma);
         OSRestoreInterrupts(ints);
         sBusy = false;
@@ -1463,6 +1504,7 @@ bool SavestateManager::saveSlotExplicit(u32 slot, bool forceRng, bool omitPracti
     StateCodec::ReadSpan practiceSource[PracticeSession::kSavestateSpanCount];
     if (!PracticeSession::captureSavestate(sCandidate.practice, practiceSource, forceRng, omitPracticeTake)) {
         rebaseMissionStopwatch(h->save_time);
+        invalidateVideoReadBuffer();
         unmuteAudioDma(dma);
         OSRestoreInterrupts(ints);
         sBusy = false;
@@ -1488,6 +1530,7 @@ bool SavestateManager::saveSlotExplicit(u32 slot, bool forceRng, bool omitPracti
         PracticeSession::kSavestateSpanCount, rawSize, slot, result);
     if (!fits) {
         rebaseMissionStopwatch(h->save_time);
+        invalidateVideoReadBuffer();
         unmuteAudioDma(dma);
         OSRestoreInterrupts(ints);
         sBusy = false;
@@ -1511,6 +1554,7 @@ bool SavestateManager::saveSlotExplicit(u32 slot, bool forceRng, bool omitPracti
 
     // The mission countdown must not charge time spent compressing a state.
     rebaseMissionStopwatch(h->save_time);
+    invalidateVideoReadBuffer();
     unmuteAudioDma(dma);
     OSRestoreInterrupts(ints);
     sBusy = false;
@@ -1665,6 +1709,13 @@ bool SavestateManager::loadSlot(u32 slot, u32 expectedGeneration) {
     bool dma = muteAudioDma();
 
     const OSTime restoreStarted = OSGetTime();
+    if (!captureLiveVideo()) {
+        unmuteAudioDma(dma);
+        OSRestoreInterrupts(ints);
+        sBusy = false;
+        feedback("E:video", "Video player busy - try again");
+        return false;
+    }
     const bool durable = fromSD || (sDurableSlots & (1u << slot)) != 0;
     if (durable) {
         captureArchiveProfile(sLiveArchiveProfile);

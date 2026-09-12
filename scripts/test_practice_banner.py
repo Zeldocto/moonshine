@@ -19,7 +19,7 @@ class PracticeBannerTests(unittest.TestCase):
         source.write_text(r'''
 typedef unsigned u32; typedef int s32;
 extern "C" int _fltused=0;
-static bool sPausePending,sFreeCamera,sRecord,sReplay,sLoadKind,sStartRelease;
+static bool sPausePending,sPaused,sFreeCamera,sRecord,sReplay,sLoadKind,sStartRelease;
 static u32 sCount=300,sCursor=290,kMaxFrames=4096;
 static s32 mismatch=-1;
 enum {SETTING_TAS_BANNER};
@@ -38,6 +38,7 @@ struct Menu {
  }
 };
 s32 desyncFrame(){return mismatch;}float cameraSpeedScale(){return 1;}
+bool paused(){return sPaused;}bool normalStage(){return true;}
 ''' + function_source(ROOT/'src/practice_session.cpp', 'void draw(Menu *menu)') + r'''
 extern "C" __declspec(dllexport) int render(int flags,int banner,int warning,int *out) {
  sRecord=flags&1;sReplay=flags&2;sFreeCamera=flags&4;sPausePending=flags&8;sLoadKind=flags&16;

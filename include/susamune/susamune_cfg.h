@@ -1390,7 +1390,8 @@ typedef char susamune_fludd_colors_dolphin_check[(SUSAMUNE_DOLPHIN_MARIO_COLORS_
 // Path of the ini, at the root of whichever device holds it. That is the device
 // the launcher was run from, which the kernel may have had to mount as a second
 // volume -- see SusamuneCfgIniPath().
-#define SUSAMUNE_INI_PATH "/susamune.ini"
+#include "data_paths.h"
+#define SUSAMUNE_INI_PATH MOONSHINE_INI_PATH
 
 // Section headers. [nintendont] holds the launcher's own options (game version,
 // per-version disc image paths, and the Nintendont settings that used to live in

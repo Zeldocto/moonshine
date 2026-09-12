@@ -12,6 +12,7 @@
 #include "vsprintf.h"
 #include "Config.h"
 #include "ff_utf8.h"
+#include "SusamuneCfg.h"
 
 static FIL dbgfile;
 static int file_opened = -1;
@@ -316,7 +317,10 @@ int dbgprintf( const char *fmt, ...)
 	{
 		if(file_opened != FR_OK)	//if log not open yet
 		{
-			file_opened = f_open_char(&dbgfile, "/ndebug.log", FA_OPEN_ALWAYS|FA_WRITE);
+			char path[64];
+			_sprintf(path, "%s/moonshine.log", SusamuneCfgStoragePrefix());
+			if (SusamuneCfgStorageAvailable())
+				file_opened = f_open_char(&dbgfile, path, FA_OPEN_ALWAYS|FA_WRITE);
 
 			if (file_opened == FR_OK)	//new log opened write header
 			{

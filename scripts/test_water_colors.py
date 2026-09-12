@@ -29,6 +29,7 @@ struct TWaterGun{u8 data[0x1dbc];};struct TMario{TWaterGun*mFludd;};
 struct TMarDirector{enum{STATE_GAME_STARTING=2};int _260,mCurState;};
 struct TApplication{enum{CONTEXT_DIRECT_STAGE=5};int mContext;}gpApplication;
 TMario*gpMarioAddress;TMarDirector*gpMarDirector;TMarDirector director;
+namespace RetailInput {TMarDirector*stageDirector(){return gpApplication.mContext==5?gpMarDirector:nullptr;}}
 void *gpModelWaterManager,*gpSplashManager,*gpMarioParticleManager;
 GXColor gModelWaterManagerWaterColor[4];void *waterVtable[9],*splashVtable[9],*particleVtable[9];
 namespace FluddColors{enum{WATER=8,WATER_HIGHLIGHT=9};unsigned mask;u8 colors[2][3];

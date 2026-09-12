@@ -5,9 +5,14 @@
 #include "SMS/System/MovieDirector.hxx"
 
 namespace {
-u32 directorType() {
+u32 directorType(bool allowFileSelect = false) {
+    // Intro Skip constructs file select from GAME_INTRO without changing context.
+    const bool fileSelect = allowFileSelect &&
+        gpApplication.mContext == TApplication::CONTEXT_GAME_INTRO &&
+        gpApplication.mCurrentScene.mAreaID == TGameSequence::AREA_OPTION;
     if (gpApplication.mContext != TApplication::CONTEXT_DIRECT_STAGE &&
-        gpApplication.mContext != TApplication::CONTEXT_DIRECT_MOVIE) return 0;
+        gpApplication.mContext != TApplication::CONTEXT_DIRECT_MOVIE &&
+        !fileSelect) return 0;
     const u32 address = reinterpret_cast<u32>(gpApplication.mDirector);
     if ((address & 3) || address < 0x80000000u || address > 0x817ffd00u) return 0;
     return *reinterpret_cast<const u32 *>(address);
@@ -17,7 +22,7 @@ u32 directorType() {
 namespace RetailInput {
 TMarDirector *stageDirector() {
     // Additional movies also run under the stage application context.
-    return directorType() == SUSAMUNE_MEM1_ADDR(0x803b3ca0u, 0x803df0c8u, 0x803d68a8u)
+    return directorType(true) == SUSAMUNE_MEM1_ADDR(0x803b3ca0u, 0x803df0c8u, 0x803d68a8u)
         ? static_cast<TMarDirector *>(gpApplication.mDirector) : nullptr;
 }
 

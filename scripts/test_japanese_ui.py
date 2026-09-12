@@ -111,10 +111,10 @@ __declspec(dllexport) unsigned int counts(unsigned int which) {return which==0?b
         translated = self.lib.lookup(b'Moonshine')
         self.assertEqual(translated, 'Moonshine 日本語版'.encode('cp932'))
         self.assertEqual(self.lib.lookup(b'Moonshine guide'), 'Moonshineガイド'.encode('cp932'))
-        self.assertEqual(self.lib.lookup(b'V2.3.0 Frame By Frame'), b'V2.3.0 Frame By Frame')
+        self.assertEqual(self.lib.lookup(b'V2.3.1 Frame By Frame'), b'V2.3.1 Frame By Frame')
         # Leave at least a full-cell allowance for every version character.
         title_width = (self.lib.measure(translated) * 20 + 23) // 24
-        self.assertLess(title_width + len('V2.3.0 Frame By Frame') * 12 + 12, 560 - 2 * 18)
+        self.assertLess(title_width + len('V2.3.1 Frame By Frame') * 12 + 12, 560 - 2 * 18)
         stale = C.create_string_buffer(bytes(64) + bytes(self.asset[64:]))
         self.lib.reset(stale, len(self.asset))
         self.assertEqual(self.lib.lookup(b'Moonshine'), b'Moonshine')

@@ -1,4 +1,4 @@
-# Moonshine V2.3.0 Frame By Frame
+# Moonshine V2.3.1 Frame By Frame
 
 User guide · English
 
@@ -6,7 +6,7 @@ Moonshine provides tools for studying movement, building TAS recordings and comp
 
 ## Install and update
 
-Copy the ZIP's `apps` folder to the SD card root. The launcher belongs in `apps/moonshine_launcher`. Replace the package files, and keep your existing themes, music, `susamune.ini`, records and ghosts. The launcher supports the existing JP, US and PAL disc revisions. Use your own disc or game image. Use the launcher and mod files from the same release. **Make fresh SD states with this build. Earlier SD states and TAS projects cannot be opened by this update. Keep older files with their matching build; make new saves here.** Settings, records and ghosts remain usable.
+Copy the ZIP's `apps` folder to the SD card root. The launcher belongs in `apps/moonshine_launcher`. Replace the package files, and keep your existing themes, music, settings, records and ghosts. The launcher supports the existing JP, US and PAL disc revisions. Use your own disc or game image. Use the launcher and mod files from the same release. **Make fresh SD states with this build. Earlier SD states and TAS projects cannot be opened by this update. Keep older files with their matching build; make new saves here.** Settings, records and ghosts remain usable.
 
 The **standard download keeps every Moonshine menu in English**, including when you play JP. It does not change Sunshine's own language. The **Japanese download (日本語版)** uses Japanese launcher menus regardless of the selected game region, and translates Moonshine's in-game menus on JP; US/PAL in-game menus stay English. Some Japanese status messages and the built-in Guide body remain English. Use **System > Moonshine guide** for a short in-game reference.
 
@@ -16,11 +16,33 @@ Open Moonshine Launcher from the Homebrew Channel. Choose the matching **Version
 
 Choose **Guide** on the launcher's home screen to read the written guide on your TV. Select a topic with Up/Down and A; use Up/Down to scroll or Left/Right to move a page. B returns to the topics, then to the launcher. The guide is built into the launcher and works without a separate file.
 
-Put **background.png** (1024×480 PNG, up to 2 MiB) and **bgm.mp3** (up to 4 MiB) in **/Moonshine_Theme** at the SD root. A launcher opened from USB uses that folder on USB. The launcher creates a missing folder once its storage device is ready; add your own background and music there. Existing files are preserved, and a folder-creation failure does not stop startup. The old theme folder beside boot.dol is no longer used.
+Put **background.png** (1024×480 PNG, up to 2 MiB) and **bgm.mp3** (up to 4 MiB) in **/Moonshine data/theme** at the SD root. A launcher opened from USB uses that folder on USB. The launcher creates a missing folder once its storage device is ready; add your own background and music there. Existing files are preserved. The first launch also moves an existing root theme into this folder.
 
 The launcher loads your theme before the kernel startup screens when its device is available. A USB device that cannot be opened that early is retried after normal storage initialization. Music starts after kernel setup. Startup and error text have explicit drawing state and outlines for dark themes. Startup checks your remembered Sunshine path. It mounts another device only when your selected version or Path needs it; storage messages remain visible during those waits.
 
-Configuration and saved mod data belong to the device the launcher was opened from. For example, a launcher on SD still saves its configuration on SD when the game is on USB. Settings and binds are separate for JP, US and PAL. Keep the existing `susamune_*` names when updating.
+Configuration and saved mod data belong to the device the launcher was opened from. For example, a launcher on SD still saves its configuration on SD when the game is on USB. Settings and binds are separate for JP, US and PAL.
+
+## Your data folder
+
+Moonshine keeps its files in **/Moonshine data** on the launcher's device.
+The launcher creates the folders and moves existing Moonshine data there on
+first launch. Keep your old files when updating; you do not need to rename them.
+The app itself stays in `/apps/moonshine_launcher`.
+
+| Location inside Moonshine data | Contents |
+| --- | --- |
+| `moonshine.ini` | Settings, layouts and button binds |
+| `moonshine_*.bin` | Records, achievements and other practice journals |
+| `theme/` | `background.png` and `bgm.mp3` |
+| `ghosts/` | Your ghosts; incoming files go in `import/`, exports in `share/` |
+| `states/` | Named SD savestates |
+| `tas/` | Saved TAS projects |
+| `crashes/` | Crash reports; keep each matching text/binary/core set together |
+| `backups/` | Preserved files from migration or backup operations |
+
+The Japanese download includes an optional flag at
+`Moonshine data/theme/background.png`. Copy it only if you want that background;
+keep your existing theme otherwise. The English download supplies no theme.
 
 ## Find the controls
 
@@ -68,9 +90,13 @@ While practice is paused, Advance takes priority over overlapping shortcuts. Hol
 
 Open **Practice > Free camera** and turn it On. This automatically pauses live gameplay. Move with the main stick, look with the C-stick, and use L/R analog pressure to descend/ascend. **Movement speed** saves a speed from 0.25x to 4x; hold X for a temporary boost. **Look sensitivity** separately sets C-stick turning speed from 0.25x to 4x.
 
+Choose **Resume gameplay** on the same page to run the game at normal speed while keeping free camera On. **Pause gameplay** stops it again. The sticks control the camera in either mode. Both sticks follow every direction, with a gentle response near the centre and full speed at the edge.
+
+**Camera smoothing** eases movement and turning when you press, change direction or release the sticks. Choose **0.1–1.5 seconds** in 0.1-second steps. Longer times give slower starts and stops. The default is **Off**, which responds and stops immediately.
+
 **Hide all HUD** hides game and Moonshine overlays while free camera is On. You can still open the mod menu to change settings. Turn the option or free camera Off to show your normal overlays again.
 
-If main-stick left/right feels backwards, enable **Reverse sideways** on the same page. It changes sideways movement only, leaving C-stick look unchanged; the default is Off. Recenter returns to the retail camera's view. Turn free camera Off to restore that view; gameplay stays paused until you choose Resume.
+If main-stick left/right feels backwards, enable **Reverse sideways** on the same page. It changes sideways movement only, leaving C-stick look unchanged; the default is Off. Recenter returns to the retail camera's view. Turning free camera Off restores that view and leaves gameplay paused or running as you had it.
 
 Free camera also works in the ordinary Start pause. It remains usable while stepping, but **Camera On means Mario input Off**: A and the sticks will not control Mario on those steps. Turn it Off before stepping a jump or spin. The camera is temporary drawing state; it is restored before gameplay and savestate operations. It closes on a scene transition.
 
@@ -93,7 +119,7 @@ The three memory slots start empty after closing the game or rebooting. To keep 
 ## Keep a state on SD
 
 1. Make a normal memory savestate and choose its slot under **Save to**.
-2. Open **Practice > Savestates > SD states > Save memory state to SD**. Give the state a name, confirm it with Start, and wait until saving finishes. It creates a new `.mss` file in `/moonshine_states` on the launcher's device. X + Start cancels naming.
+2. Open **Practice > Savestates > SD states > Save memory state to SD**. Give the state a name, confirm it with Start, and wait until saving finishes. It creates a new `.mss` file in `/Moonshine data/states` on the launcher's device. X + Start cancels naming.
 3. After rebooting, use the same mod build, game region and launcher setup, then enter the same level and episode. Secret areas also need the same parent episode.
 4. Open **SD states > Refresh / first page** and highlight your file. Choose one of the actions below.
 
@@ -133,7 +159,7 @@ Select Continue, Replay, Beginning or a checkpoint action and press **X** to ass
 
 In **Open TAS**, highlight a name and press **Start** to rename it or **X** to delete its SD copy, with confirmation. Deleting the SD copy keeps the checkpoints currently in memory; save again if you want to keep that work after closing the game.
 
-TAS projects use the same three memory slots as ordinary savestates. A new TAS uses an empty slot when possible. If it needs an occupied ordinary slot, it asks which state you want to replace; cancel to keep it. Its Beginning and two checkpoints have clear names in the TAS screen, so you do not need to manage their slot numbers or import separate files. **Save Checkpoint** keeps a retry point in memory; **Save TAS** keeps the whole project on SD, under `/moonshine_tas`. Only the SD save survives closing the game or rebooting. The ordinary SD states menu remains separate.
+TAS projects use the same three memory slots as ordinary savestates. A new TAS uses an empty slot when possible. If it needs an occupied ordinary slot, it asks which state you want to replace; cancel to keep it. Its Beginning and two checkpoints have clear names in the TAS screen, so you do not need to manage their slot numbers or import separate files. **Save Checkpoint** keeps a retry point in memory; **Save TAS** keeps the whole project on SD, under `/Moonshine data/tas`. Only the SD save survives closing the game or rebooting. The ordinary SD states menu remains separate.
 
 Normal area changes, such as entering a secret, keep the recording. Inputs during intros, fades, conversations and movies are recorded too, including skip presses and FLUDD's movie sequence. Loading waits use no input frames, but ready intro and movie frames count toward the **4096-frame limit**. Up to **32 area/movie transitions** fit in a take. If a transition is unsupported or a limit is reached, recording stops and the take is kept so you can save it.
 
@@ -169,7 +195,7 @@ In Display > Timer and splits > Timer and splits, choose the comparison: **Off �
 
 These controls are also under Runs > Timer and splits. **Level splits** is the overlay toggle on the first page.
 
-Exported shareable ghosts live under `susamune_ghosts/share/` on the launcher's device. Put incoming `.smsghost` files in `susamune_ghosts/import/`, then import them from Ghosts. Keep internal `.sgh` files in their existing folders. The included Full Reds ILs remain available through Runs: choose the full-level route when you want the approach and secret reds timed together.
+Exported shareable ghosts live under `Moonshine data/ghosts/share/` on the launcher's device. Put incoming `.smsghost` files in `Moonshine data/ghosts/import/`, then import them from Ghosts. Keep internal `.sgh` files in their existing folders. The included Full Reds ILs remain available through Runs: choose the full-level route when you want the approach and secret reds timed together.
 
 ## Layout and colours
 
@@ -177,11 +203,13 @@ Display > Layout editor has separate groups for Timers, Controller inputs, Metad
 
 **Timers > Sunshine timer** opens the full editor: position, size, opacity, brightness, all 13 characters, TIME/TEMPO and the streak. Its position range spans the full screen.
 
-The first option, **Appearance**, lets you choose **Original** or **Custom**. Leave the target on All to change the whole timer, or press Start to choose one character or image. Original keeps the game's shading and lets you tint it; Custom uses your chosen colours more directly. RGB editing keeps the appearance mode you selected. To restore the whole timer's normal colours, choose **All > Appearance > Original**, then reset Red, Green and Blue individually with **Z** and confirmation. Position, size and the other style controls stay as they were.
+The first option, **Appearance**, lets you choose **Original** or **Custom**. Leave the target on All to change the whole timer, or press Start to choose one character or image. Original keeps the game's shading and lets you tint it; Custom uses your chosen colours more directly. Colour editing keeps the appearance mode you selected. To restore the whole timer's normal colours, choose **All > Appearance > Original**, then reset Hue, Saturation and Lightness individually with **Z** and confirmation. Position, size and the other style controls stay as they were.
 
-**Native HUD colours** includes separate Health counter colour and Underwater air colour controls. Reset restores the retail colours. In RGB controls, hold **Y** while adjusting with the C-stick for increments of 1 instead of 4. A keeps edits, B discards, and Z resets the selected option, with confirmation.
+The shared colour editor uses **Hue, Saturation and Lightness (HSL)**. Hue chooses the colour around a 0–359 degree wheel. Saturation runs from grey at 0% to full colour at 100%; Lightness runs from black at 0% to white at 100%. Your existing colours are kept when you update. Hold **Y** while adjusting with the C-stick for increments of 1 instead of 4. A keeps edits, B discards, and Z resets the selected option, with confirmation.
 
-**Display > Appearance > Mario appearance** contains **Mario colours** and **FLUDD colours**, both using the same Creation editor. Press Start to select All or one part. Choose Original/Custom independently for each part; changing RGB selects Custom. Original keeps the stored custom RGB for later. Keep/Discard/Reset and Y for one-unit RGB adjustments work here too.
+**Native HUD colours** includes separate Health counter colour and Underwater air colour controls. Reset restores the retail colours.
+
+**Display > Appearance > Mario appearance** contains **Mario colours** and **FLUDD colours**, both using the same Creation editor. Press Start to select All or one part. Choose Original/Custom independently for each part; changing HSL selects Custom. Original keeps the stored custom colour for later. Keep/Discard/Reset and Y for one-unit HSL adjustments work here too.
 
 | Editor | Parts |
 |---|---|
@@ -202,6 +230,6 @@ The SD states menu requires Moonshine Launcher's storage service; standalone Dol
 
 ## Reports and limitations
 
-Include the game region, scene, settings, reproduction steps and displayed build checksum when reporting problems. Keep the crash text, `.bin` and `.core` files together. The optional `tools/decode_crash.py` script reads the binary reports with Python 3. Crash reporting attempts to preserve a minimal record even if a larger report cannot be completed; storage is still required for a file to survive shutdown.
+Include the game region, scene, settings, reproduction steps and displayed build checksum when reporting problems. Crash history is stored in `/Moonshine data/crashes`, with up to 16 recent reports. Keep the matching text, `.bin` and `.core` files from the same report together; older reports are preserved during migration. The optional `tools/decode_crash.py` script reads the binary reports with Python 3. Crash reporting attempts to preserve a minimal record even if a larger report cannot be completed; storage is still required for a file to survive shutdown.
 
 The mod reserves 768 KiB of MEM1, 256 KiB more than V2.2. Fixed timer scratch, attachment heap and savestate ownership remain separate. This reduces the game heap's capacity by 256 KiB; the remaining free space depends on the scene and needs console measurement.
