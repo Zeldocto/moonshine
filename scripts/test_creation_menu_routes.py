@@ -35,7 +35,7 @@ class CreationMenuRouteTests(unittest.TestCase):
 #include "susamune/settings_list.h"
 typedef unsigned char u8;typedef unsigned short u16;typedef unsigned u32;
 #define ID(name,key) name,
-enum SettingId { SUSAMUNE_SETTING_LIST(ID) };
+enum SettingId { SUSAMUNE_SETTING_LIST(ID) SETTING_BUTTSLIDE_DISPLAY };
 #undef ID
 enum { SUSAMUNE_CREATION_TIMER_BG=1,SUSAMUNE_CREATION_TIMER_LABEL=2 };
 #define SUSAMUNE_GLYPH_SLASH "/"

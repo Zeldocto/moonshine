@@ -62,6 +62,16 @@ class NestedMenuContracts(unittest.TestCase):
         )
         self.assertEqual(len(settings), len(categories))
         setting_category = dict(zip(settings, categories))
+        alias = "SETTING_BUTTSLIDE_DISPLAY"
+        self.assertNotIn(alias, setting_category)
+        self.assertIn(
+            f"{alias} = SETTING_COUNT", text("include/susamune/settings.hxx")
+        )
+        category_body = function(
+            text("src/settings.cpp"), r"SettingCategory Settings::category\(SettingId id\)"
+        )
+        self.assertIn(f"if (id == {alias}) id = SETTING_JUMP_DISPLAY;", category_body)
+        setting_category[alias] = setting_category["SETTING_JUMP_DISPLAY"]
 
         def page_ids(*arrays: str) -> list[str]:
             result: list[str] = []

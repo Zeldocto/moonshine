@@ -3303,6 +3303,7 @@ const u8 kDisplayMovementSettings[] = {
     SETTING_WALLKICK_DISPLAY,
     SETTING_GB_SKIP_DISPLAY,
     SETTING_JUMP_DISPLAY,
+    SETTING_BUTTSLIDE_DISPLAY,
     SETTING_ROLLOUT_DISPLAY,
     SETTING_DUST_DISPLAY,
 };
@@ -3447,7 +3448,8 @@ const char *settingHelp(SettingId id) {
     case SETTING_GELATO_BLUE_BIRD_PATTERN: return "Selects a repeatable blue-bird pattern.";
     case SETTING_WALLKICK_DISPLAY: return "Shows the timing of Mario's last wall kick.";
     case SETTING_GB_SKIP_DISPLAY: return "B timing after a full A jump: target 9f, Y404, V6. Edit its style below.";
-    case SETTING_JUMP_DISPLAY: return "Landing jump timing, buttslide jump readiness, or both. Edit each style below.";
+    case SETTING_JUMP_DISPLAY: return "Jump timing after landing.";
+    case SETTING_BUTTSLIDE_DISPLAY: return "When a buttslide jump is ready.";
     case SETTING_ROLLOUT_DISPLAY: return "Shows the effective A-hold frames of a rollout.";
     case SETTING_DUST_DISPLAY: return "Shows frames from landing until the rollout input.";
     case SETTING_SHOW_BGM_SLOTS: return "Shows free music slots for audio diagnostics.";
@@ -3483,7 +3485,7 @@ public:
     }
     bool favoriteHint() const override {
         if (pageRoot()) return false;
-        u8 ids[SETTING_COUNT];
+        u8 ids[SETTING_COUNT + 1];
         const int settings = buildList(ids);
         return mSel < settings &&
                Settings::favoriteable((SettingId)ids[mSel]);
@@ -3542,7 +3544,7 @@ public:
             updatePageRoot(menu, pad);
             return;
         }
-        u8  ids[SETTING_COUNT];
+        u8  ids[SETTING_COUNT + 1];
         const int settings = buildList(ids);
         const int n = settings + extraRows();
         if (n == 0) {
@@ -3638,7 +3640,7 @@ public:
             drawPageRoot(menu, x, y, w, h);
             return;
         }
-        u8  ids[SETTING_COUNT];
+        u8  ids[SETTING_COUNT + 1];
         const int settings = buildList(ids);
         const int n = settings + extraRows();
         if (n == 0) {
@@ -3846,7 +3848,7 @@ private:
             return page.count;
         }
         int n = 0;
-        const int count = SETTING_COUNT;
+        const int count = SETTING_COUNT + 1;
         for (int i = 0; i < count; i++) {
             const SettingId id = (SettingId)i;
             const bool include = isStarred()

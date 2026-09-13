@@ -1587,16 +1587,11 @@ Layout profile applied	レイアウトを適用しました。
 GB skip timing	GBすり抜けタイミング
 Jump display	ジャンプ表示
 B timing after a full A jump: target 9f, Y404, V6. Edit its style below.	最大Aジャンプ後のB入力。目標9f・Y404・V6。下の項目から表示を編集。
-Landing jump timing, buttslide jump readiness, or both. Edit each style below.	着地後のジャンプ時間、おしりすべりのジャンプ可否、または両方。下の項目から各表示を編集。
-Jump: %uf QF%u	ジャンプ: %uf QF%u
-Jump: Late QF%u	ジャンプ: 遅い QF%u
-GB timing: %s %u%sf Y%.0f V%.1f	GB: %s %u%sf Y%.0f V%.1f
 Early	早い
 On time	適切
 Check jump	ジャンプ要確認
 Landing	着地後
 Buttslide	おしりすべり
-Buttslide: %s	おしりすべり: %s
 Jump ready	ジャンプ可能
 
 # Runner-provided achievement title translations (September 13 proposal).
@@ -1652,3 +1647,10 @@ Robber Baron	ナイトバロン
 Mogul	たいしたもんだ
 Tycoon	超大物
 Emperor	皇帝
+Buttslide display	おしりすべり表示
+Jump timing after landing.	着地から次のジャンプまでのフレーム数と、離陸したQFを表示。
+When a buttslide jump is ready.	おしりすべり中にジャンプできるタイミングを小さく表示。
+%uf qf%u	%uf qf%u
+%s qf%u	%s qf%u
+%s %u%sf Y%.0f V%.1f	%s %u%sf Y%.0f V%.1f
+Ready	ジャンプ可能

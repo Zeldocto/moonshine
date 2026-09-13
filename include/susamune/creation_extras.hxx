@@ -22,6 +22,8 @@ bool updateCreationKeyboardText(TMarioGamePad *pad, char *text, u8 &length,
                                 u8 &cursor);
 const char *wallkickDisplayLabel(int index);
 const char *practiceDisplayName(unsigned display);
+void formatPracticeDisplay(char *out, unsigned capacity, unsigned display,
+                           unsigned color, unsigned frames, unsigned qf, float y, float v);
 
 class CreationExtras {
 public:
@@ -133,6 +135,7 @@ private:
 
     static CreationStyle defaultWordStyle(int index);
     static CreationStyle defaultWallkickStyle();
+    static const CreationStyle &defaultPracticeStyle(unsigned display);
     void beginOverlayEditor(EditMode mode, unsigned display = 0);
     void beginWordEditor(int index);
     void beginStageSessionEditor();

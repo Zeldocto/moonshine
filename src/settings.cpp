@@ -551,7 +551,7 @@ void Settings::set(SettingId id, u8 value) {
 }
 
 bool Settings::favoriteable(SettingId id) {
-    return id >= 0 && id < SETTING_COUNT && name(id)[0] != '\0';
+    return id >= 0 && id <= SETTING_BUTTSLIDE_DISPLAY && name(id)[0] != '\0';
 }
 
 bool Settings::favorite(SettingId id) const {
@@ -591,12 +591,17 @@ void Settings::toggleFavorite(SettingId id) {
     mDirty = true;
 }
 
-static_assert(SETTING_COUNT - (SETTING_FAVORITES_10 + 1) <=
+static_assert(SETTING_BUTTSLIDE_DISPLAY + 1 - (SETTING_FAVORITES_10 + 1) <=
               (SETTING_FAVORITES_EXTRA_7 - SETTING_FAVORITES_EXTRA_0 + 1) * 7,
               "new settings need more Shined storage");
 #pragma clang section text=""
 
 void Settings::cycle(SettingId id, int dir) {
+    if (id == SETTING_JUMP_DISPLAY || id == SETTING_BUTTSLIDE_DISPLAY) {
+        set(SETTING_JUMP_DISPLAY, mValues[SETTING_JUMP_DISPLAY] ^
+            (id == SETTING_JUMP_DISPLAY ? 1u : 2u));
+        return;
+    }
     int n = choiceCount(kSettingDescs[id]);
     int v = (int)mValues[id] + dir;
     // Wrap into [0, n). dir is +/-1, so one add/sub suffices.
@@ -613,6 +618,9 @@ void Settings::cycle(SettingId id, int dir) {
 
 const char *Settings::valueLabel(SettingId id) const {
     static char numeric[16];
+    if (id == SETTING_JUMP_DISPLAY || id == SETTING_BUTTSLIDE_DISPLAY)
+        return PackedText::at(kChoiceLabels, (mValues[SETTING_JUMP_DISPLAY] &
+            (id == SETTING_JUMP_DISPLAY ? 1u : 2u)) != 0);
     if (id >= SETTING_NATIVE_TIMER_X && id <= SETTING_NATIVE_TIMER_SCALE) {
         int value = id == SETTING_NATIVE_TIMER_X ? ((int)mValues[id] - 16) * 10 :
                     id == SETTING_NATIVE_TIMER_Y ? ((int)mValues[id] - 12) * 10 :
@@ -626,10 +634,12 @@ const char *Settings::valueLabel(SettingId id) const {
 }
 
 const char *Settings::name(SettingId id) {
+    if (id == SETTING_BUTTSLIDE_DISPLAY) return "Buttslide display";
     return PackedText::at(kSettingNames, (int)id);
 }
 
 SettingCategory Settings::category(SettingId id) {
+    if (id == SETTING_BUTTSLIDE_DISPLAY) id = SETTING_JUMP_DISPLAY;
     return settingCategory(kSettingDescs[id]);
 }
 

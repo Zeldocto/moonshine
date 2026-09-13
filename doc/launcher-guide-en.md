@@ -244,7 +244,7 @@ Display > HUD and displays > Movement displays has Jump display and GB skip timi
 
 Jump display shows 1f-6f after landing, then Late, with the takeoff's QF0-3 phase. Each landing starts a fresh count. Paused frames do not count.
 
-Choose Landing, Buttslide or Both. Buttslide shows when the game can accept your jump during a slide; the cue follows the current surface and slide state. It does not press A for you.
+Jump display and Buttslide display have separate On/Off toggles. Both can be shown together. The compact Ready / Waiting cue shows when the game can accept your jump during a slide; the cue follows the current surface and slide state. It does not press A for you.
 
 GB skip timing checks an ordinary full A jump followed by B. The no-hover target is 9 airborne frames, Y404 and vertical speed 6. Early/On time/Late reports timing, not clip success.
 

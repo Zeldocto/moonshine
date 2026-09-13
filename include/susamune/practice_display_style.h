@@ -35,9 +35,10 @@ static inline void SusamunePracticeDisplayStyleInit(struct SusamunePracticeDispl
     cfg->count = SUSAMUNE_PRACTICE_DISPLAY_COUNT;
     for (i = 0; i < SUSAMUNE_PRACTICE_DISPLAY_COUNT; ++i) {
         struct SusamunePracticeDisplayStyle *style = &cfg->entries[i];
-        style->x = 300; style->y = 106;
-        style->scale = 90; style->textA = 255;
-        style->bgA = 185; style->textBrightness = 100; style->padding = 5;
+        style->x = 300; style->y = i == 0 ? 106 : i == 1 ? 132 : 156;
+        style->scale = i == 2 ? 70 : 90; style->textA = 255;
+        style->bgA = i == 2 ? 128 : 185;
+        style->textBrightness = 100; style->padding = i == 2 ? 2 : 5;
         for (color = 0; color < sizeof(style->rgb); ++color)
             ((unsigned char *)style->rgb)[color] = 255;
     }

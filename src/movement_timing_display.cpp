@@ -1,19 +1,13 @@
 #include "susamune/movement_timing_display.hxx"
 
 #include "Dolphin/mem.h"
-#include "Dolphin/printf.h"
 #include "SMS/Player/Mario.hxx"
 #include "SMS/Player/MarioGamePad.hxx"
 #include "SMS/System/MarDirector.hxx"
 #include "susamune/creation_extras.hxx"
-#include "susamune/japanese_ui.hxx"
 #include "susamune/menu.hxx"
 #include "susamune/retail_input.hxx"
 #include "susamune/settings.hxx"
-
-#if defined(SUSAMUNE_VERSION_JP)
-#define snprintf JapaneseUi::format
-#endif
 
 extern "C" {
 extern void *marioTimingVtable[] asm("__vt__6TMario");
@@ -25,14 +19,14 @@ int retailSlipJumpMode(TMario *) asm("canSlipJump__6TMarioFv");
 namespace MovementTimingDisplay {
 namespace {
 
-enum Result { EARLY, ON_TIME, LATE, CHECK_JUMP, JUMP };
+enum Result { EARLY, ON_TIME, LATE, CHECK_JUMP };
 
 TMario *sMario;
 TMarDirector *sDirector;
 u32 sFrame, sLandingFrame, sJumpFrame;
 float sResultY, sResultV;
 u16 sResultFrames;
-u8 sPopupFrames, sResult, sJumpPhase;
+u8 sPopupFrames, sResult, sJumpPhase, sJumpResultFrames, sJumpPopupFrames;
 bool sFrameActive, sLanded, sJumping, sHookReady;
 
 bool gbEnabled() { return gSettings.getBool(SETTING_GB_SKIP_DISPLAY); }
@@ -58,6 +52,7 @@ void reset() {
     sDirector = RetailInput::stageDirector();
     sJumping = false;
     sPopupFrames = 0;
+    sJumpPopupFrames = 0;
     sFrameActive = false;
     sLanded = false;
 }
@@ -107,10 +102,9 @@ void perform(TMario *mario, u32 cue, JDrama::TGraphics *graphics) {
                (pressed & TMarioControllerWork::A)) {
         if (jumpEnabled() && sLanded) {
             const u32 frames = sFrame - sLandingFrame;
-            sResultFrames = frames > 6 ? 7 : frames ? (u16)frames : 1;
+            sJumpResultFrames = frames > 6 ? 7 : frames ? (u8)frames : 1;
             sJumpPhase = sDirector->unk58 & 3;
-            sResult = JUMP;
-            sPopupFrames = 90;
+            sJumpPopupFrames = 90;
         }
         sLanded = false;
         if (gbEnabled() && after == TMario::STATE_JUMP) {
@@ -137,43 +131,44 @@ void onStageSetup() {
 void onSavestateLoaded() { reset(); }
 
 void beforeDirect(bool active) {
-    if ((!gbEnabled() && !jumpEnabled()) || gpMarioOriginal != sMario ||
+    if (gpMarioOriginal != sMario ||
         RetailInput::stageDirector() != sDirector) reset();
-    if (!gbEnabled()) sJumping = false;
-    if (!jumpEnabled()) sLanded = false;
+    if (!gbEnabled()) { sJumping = false; sPopupFrames = 0; }
+    if (!jumpEnabled()) { sLanded = false; sJumpPopupFrames = 0; }
     sFrameActive = active && sHookReady && sMario && (gbEnabled() || jumpEnabled());
     if (!sFrameActive) return;
     ++sFrame;
     if (sPopupFrames) --sPopupFrames;
+    if (sJumpPopupFrames) --sJumpPopupFrames;
 }
 
 void afterDirect(bool) { sFrameActive = false; }
 
-bool draw(Menu *menu) {
-    const int slide = buttslideStatus();
-    if (!menu || (!slide && (!sPopupFrames || (sResult == JUMP ? !jumpEnabled() : !gbEnabled()))))
-        return false;
+static __attribute__((noinline)) void drawResult(Menu *menu, unsigned display,
+                                                unsigned color, unsigned frames) {
     char text[80];
-    if (slide) {
-        snprintf(text, sizeof(text), "Buttslide: %s",
-                 JapaneseUi::text(slide == 2 ? "Jump ready" : "Waiting"));
-    } else if (sResult == JUMP) {
-        if (sResultFrames > 6)
-            snprintf(text, sizeof(text), "Jump: Late QF%u", (unsigned)sJumpPhase);
-        else
-            snprintf(text, sizeof(text), "Jump: %uf QF%u", (unsigned)sResultFrames,
-                     (unsigned)sJumpPhase);
-    } else {
-        const char *const result = sResult == EARLY ? "Early" :
-            sResult == ON_TIME ? "On time" : sResult == LATE ? "Late" : "Check jump";
-        snprintf(text, sizeof(text), "GB timing: %s %u%sf Y%.0f V%.1f", JapaneseUi::text(result),
-                 (unsigned)sResultFrames, sResultFrames == 255 ? "+" : "",
-                 sResultY, sResultV);
+    formatPracticeDisplay(text, sizeof(text), display, color, frames,
+                          sJumpPhase, sResultY, sResultV);
+    gCreationExtras.drawPracticeDisplay(menu, text, display, color);
+}
+
+bool draw(Menu *menu) {
+    if (!menu) return false;
+    bool drawn = false;
+    if (gbEnabled() && sPopupFrames) {
+        drawResult(menu, 0, sResult, sResultFrames);
+        drawn = true;
     }
-    gCreationExtras.drawPracticeDisplay(menu, text,
-        slide ? 2 : sResult == JUMP ? 1 : 0,
-        slide ? slide == 2 ? 0 : 1 : sResult == JUMP ? sResultFrames - 1 : sResult);
-    return true;
+    if (jumpEnabled() && sJumpPopupFrames) {
+        drawResult(menu, 1, sJumpResultFrames - 1, sJumpResultFrames);
+        drawn = true;
+    }
+    const int slide = buttslideStatus();
+    if (slide) {
+        drawResult(menu, 2, slide == 2 ? 0 : 1, 0);
+        drawn = true;
+    }
+    return drawn;
 }
 
 }  // namespace MovementTimingDisplay

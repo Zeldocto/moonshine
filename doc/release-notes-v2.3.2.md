@@ -9,10 +9,10 @@
 
 ## Movement timing
 
-- **Jump display** shows **1f–6f**, then **Late**, from your most recent landing to your next jump. The takeoff's quarter-frame phase stays alongside it: for example, `Jump: 1f QF2`.
-- Choose **Buttslide** to see when a jump is ready during a buttslide, or **Both** for both jump displays. The cue follows the game's jump rules, including the surface and slide state.
+- **Jump display** shows **1f–6f**, then **Late**, from your most recent landing to your next jump. The takeoff's quarter-frame phase stays alongside it: for example, `1f qf2`.
+- Turn on **Buttslide display** to see a compact **Ready / Waiting** cue. **Jump display** has its own On/Off toggle; both can stay visible together. The cue follows the game's jump rules, including the surface and slide state.
 - **GB skip timing** checks the B press after an ordinary full A jump. It reports Early, On time, Late or Check jump, with the airborne frame count, height and vertical speed. The supplied target is 9 frames, Y404 and vertical speed 6. It does not check horizontal position or prove that the skip succeeded.
-- Both displays are optional, under **Display > HUD and displays > Movement displays**. Their Edit rows, also in Layout editor > Practice feedback, give GB, Jump and Buttslide independent position, size, opacity, background and colour controls.
+- All three displays are optional, under **Display > HUD and displays > Movement displays**. Their Edit rows, also in Layout editor > Practice feedback, give GB, Jump and Buttslide independent position, size, opacity, background and colour controls.
 
 ## Five named layout profiles
 

@@ -227,9 +227,9 @@ Mario's skin stays unchanged. Magenta on the cap and shirt no longer produces re
 
 Open **Display > HUD and displays > Movement displays** to enable **Jump display** or **GB skip timing**. Use the Edit rows on that page, or **Layout editor > Practice feedback**, to change GB timing, Jump timing and Buttslide separately. Each has its own position, size, opacity, background and colours.
 
-**Jump display** measures game frames from your most recent landing to your next jump. It shows **1f–6f**, then **Late**, alongside the takeoff's quarter-frame phase. `Jump: 1f QF2` means you jumped one rendered game frame after landing, on quarter-frame phase 2. Paused frames do not count, and changing areas or loading a state clears the result.
+**Jump display** measures game frames from your most recent landing to your next jump. It shows **1f–6f**, then **Late**, alongside the takeoff's quarter-frame phase. `1f qf2` means you jumped one rendered game frame after landing, on quarter-frame phase 2. Paused frames do not count, and changing areas or loading a state clears the result.
 
-Choose **Landing**, **Buttslide** or **Both** in Jump display. Buttslide shows when the game can accept a jump during your slide, using the current surface and slide state. It also works while frame advancing. It does not press or queue A for you.
+**Jump display** and **Buttslide display** have separate On/Off toggles and can be shown together. Buttslide shows a compact **Ready / Waiting** cue during your slide, using the current surface and slide state. It also works while frame advancing. It does not press or queue A for you.
 
 **GB skip timing** checks the B press after an ordinary full A jump for the no-hover GB skip. The supplied target is 9 airborne frames with Y approximately 404 and vertical speed approximately 6. It displays Early, On time, Late or Check jump with those values. It does not check X/Z or confirm that Mario clipped through.
 

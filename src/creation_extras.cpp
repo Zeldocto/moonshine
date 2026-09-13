@@ -10,6 +10,7 @@
 #include "SMS/System/Application.hxx"
 #include "susamune/glyphs.hxx"
 #include "susamune/menu.hxx"
+#include "susamune/japanese_ui.hxx"
 #include "susamune/packed_text.hxx"
 #include "susamune/rng_control.hxx"
 #include "susamune/settings.hxx"
@@ -132,7 +133,7 @@ const char kWallkickNames[] =
     "1st\0" "2nd\0" "3rd\0" "4th\0" "5th\0" "6th\0" "Late";
 const char kRolloutNames[] = "1f\0" "2f\0" "3f\0" "4f\0" "5f";
 const char kGbTimingNames[] = "Early\0On time\0Late\0Check jump";
-const char kButtslideNames[] = "Jump ready\0Waiting";
+const char kButtslideNames[] = "Ready\0Waiting";
 const u8 kPracticeColors[] = {4, 7, 2};
 
 const char *practiceColorNames(unsigned display) {
@@ -235,6 +236,26 @@ const char *wallkickDisplayLabel(int index) {
 const char *practiceDisplayName(unsigned display) {
     return display == 0 ? Settings::name(SETTING_GB_SKIP_DISPLAY) :
            display == 1 ? Settings::name(SETTING_JUMP_DISPLAY) : "Buttslide";
+}
+
+void formatPracticeDisplay(char *out, unsigned capacity, unsigned display,
+                           unsigned color, unsigned frames, unsigned qf, float y, float v) {
+#if defined(SUSAMUNE_VERSION_JP)
+#define practiceFormat JapaneseUi::format
+#else
+#define practiceFormat snprintf
+#endif
+    if (display == SUSAMUNE_PRACTICE_DISPLAY_GB) {
+        practiceFormat(out, capacity, "%s %u%sf Y%.0f V%.1f",
+            JapaneseUi::text(PackedText::at(kGbTimingNames, color)),
+            frames, frames == 255 ? "+" : "", y, v);
+    } else {
+        const char frame[] = {static_cast<char>('0' + frames), 'f', 0};
+        const bool jump = display == SUSAMUNE_PRACTICE_DISPLAY_JUMP;
+        const char *label = jump ? color == 6 ? "Late" : frame : PackedText::at(kButtslideNames, color);
+        practiceFormat(out, capacity, jump ? "%s qf%u" : "%s", JapaneseUi::text(label), qf);
+    }
+#undef practiceFormat
 }
 
 void drawCreationKeyboard(Menu *menu, const char *title, const char *text,
@@ -361,6 +382,15 @@ CreationStyle CreationExtras::defaultWallkickStyle() {
     };
 }
 
+const CreationStyle &CreationExtras::defaultPracticeStyle(unsigned display) {
+    static const CreationStyle styles[] = {
+        {300, 106, 90, 255, 0, 0, 0, 185, 100, 5},
+        {300, 132, 90, 255, 0, 0, 0, 185, 100, 5},
+        {300, 156, 70, 255, 0, 0, 0, 128, 100, 2},
+    };
+    return styles[display];
+}
+
 void CreationExtras::resetDefaults() {
     Creation::fillWhite(mColors, SUSAMUNE_CREATION_COLOR_COUNT);
     Creation::fillWhite(mDefaultColors, SUSAMUNE_CREATION_COLOR_COUNT);
@@ -387,7 +417,7 @@ void CreationExtras::resetDefaults() {
     Creation::fillWhite(mDustRgb, SUSAMUNE_DUST_STYLE_COLOR_COUNT);
     memset(mPracticeDisplays, 0, sizeof(mPracticeDisplays));
     for (unsigned i = 0; i < SUSAMUNE_PRACTICE_DISPLAY_COUNT; ++i) {
-        storeStyle(&mPracticeDisplays[i].x, defaultWallkickStyle());
+        storeStyle(&mPracticeDisplays[i].x, defaultPracticeStyle(i));
         Creation::fillWhite(mPracticeDisplays[i].rgb, SUSAMUNE_PRACTICE_DISPLAY_COLOR_COUNT);
     }
     mAchievementBannerStyle = defaultAchievementBannerStyle();
@@ -627,9 +657,17 @@ void CreationExtras::adoptPracticeDisplays(
         src->version != SUSAMUNE_PRACTICE_DISPLAY_STYLE_VERSION ||
         src->count != SUSAMUNE_PRACTICE_DISPLAY_COUNT) return;
     memcpy(mPracticeDisplays, (const void *)src->entries, sizeof(mPracticeDisplays));
+    static const SusamunePracticeDisplayStyle inherited = {
+        300, 106, 90, 255, 0, 0, 0, 185, 100, 5,
+        {{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255},
+         {255, 255, 255}, {255, 255, 255}, {255, 255, 255}}, {0, 0, 0},
+    };
     for (unsigned i = 0; i < SUSAMUNE_PRACTICE_DISPLAY_COUNT; ++i) {
         clampStyle(*reinterpret_cast<CreationStyle *>(&mPracticeDisplays[i].x));
         memset(mPracticeDisplays[i].reserved, 0, sizeof(mPracticeDisplays[i].reserved));
+        // Separate only untouched defaults inherited from the old shared display.
+        if (memcmp(&mPracticeDisplays[i], &inherited, sizeof(inherited)) == 0)
+            storeStyle(&mPracticeDisplays[i].x, defaultPracticeStyle(i));
     }
 }
 
@@ -1133,36 +1171,36 @@ void CreationExtras::drawSavestateFeedback(Menu *menu,
                           mSavestateFeedbackRgb, 1, message);
 }
 
+static __attribute__((noinline)) void drawMovementFeedback(
+    Menu *menu, const char *message, const CreationStyle &style,
+    const u8 (*rgb)[3], int color, unsigned colors) {
+    Creation::drawTextBox(menu, style, rgb + clampi(color, 0, colors - 1), 1, message);
+}
+
 void CreationExtras::drawWallkickDisplay(Menu *menu, const char *message,
                                          int color) const {
-    if (!menu || !message) return;
-    color = clampi(color, 0, SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT - 1);
-    Creation::drawTextBox(menu, mWallkickStyle, mWallkickRgb + color, 1,
-                          message);
+    drawMovementFeedback(menu, message, mWallkickStyle, mWallkickRgb, color,
+                         SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT);
 }
 
 void CreationExtras::drawRolloutDisplay(Menu *menu, const char *message,
                                         int color) const {
-    if (!menu || !message) return;
-    color = clampi(color, 0, SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT - 1);
-    Creation::drawTextBox(menu, mRolloutStyle, mRolloutRgb + color, 1,
-                          message);
+    drawMovementFeedback(menu, message, mRolloutStyle, mRolloutRgb, color,
+                         SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT);
 }
 
 void CreationExtras::drawDustDisplay(Menu *menu, const char *message,
                                      int color) const {
-    if (!menu || !message) return;
-    color = clampi(color, 0, SUSAMUNE_DUST_STYLE_COLOR_COUNT - 1);
-    Creation::drawTextBox(menu, mDustStyle, mDustRgb + color, 1, message);
+    drawMovementFeedback(menu, message, mDustStyle, mDustRgb, color,
+                         SUSAMUNE_DUST_STYLE_COLOR_COUNT);
 }
 
 void CreationExtras::drawPracticeDisplay(Menu *menu, const char *message,
                                         unsigned display, int color) const {
-    if (!menu || !message || display >= SUSAMUNE_PRACTICE_DISPLAY_COUNT) return;
+    if (display >= SUSAMUNE_PRACTICE_DISPLAY_COUNT) return;
     const SusamunePracticeDisplayStyle &cfg = mPracticeDisplays[display];
-    Creation::drawTextBox(menu, *reinterpret_cast<const CreationStyle *>(&cfg.x),
-                          cfg.rgb + clampi(color, 0, kPracticeColors[display] - 1),
-                          1, message);
+    drawMovementFeedback(menu, message, *reinterpret_cast<const CreationStyle *>(&cfg.x),
+                         cfg.rgb, color, kPracticeColors[display]);
 }
 
 static void drawNotification(Menu *menu, const char *message,
@@ -1318,8 +1356,8 @@ void CreationExtras::updateEditor(TMarioGamePad *pad) {
         : mEditMode == EDIT_RECENT_ILS ? defaultRecentIlStyle()
         : mEditMode == EDIT_SAVESTATE_FEEDBACK
               ? defaultSavestateFeedbackStyle()
-        : (mEditMode >= EDIT_WALLKICK && mEditMode <= EDIT_DUST) ||
-          mEditMode == EDIT_PRACTICE_DISPLAY ? defaultWallkickStyle()
+        : (mEditMode >= EDIT_WALLKICK && mEditMode <= EDIT_DUST) ? defaultWallkickStyle()
+        : mEditMode == EDIT_PRACTICE_DISPLAY ? defaultPracticeStyle(mEditFirst)
         : mEditMode == EDIT_ACHIEVEMENT_BANNER
               ? defaultAchievementBannerStyle()
         : mEditMode == EDIT_TOAST ? defaultToastStyle()
@@ -1449,8 +1487,15 @@ void CreationExtras::drawEditor(Menu *menu) const {
         mEditMode == EDIT_PRACTICE_DISPLAY) {
         const u16 target = mEditor.target();
         const int color = target ? target - 1 : 0;
-        const char *preview = PackedText::at(mEditMode == EDIT_PRACTICE_DISPLAY ?
-            practiceColorNames(mEditFirst) : mEditMode == EDIT_ROLLOUT ? kRolloutNames : kWallkickNames, color);
+        char formatted[80];
+        const char *preview;
+        if (mEditMode == EDIT_PRACTICE_DISPLAY) {
+            const unsigned frames = mEditFirst == SUSAMUNE_PRACTICE_DISPLAY_GB ?
+                (color == 0 ? 8 : color == 2 ? 10 : 9) : color + 1;
+            formatPracticeDisplay(formatted, sizeof(formatted), mEditFirst, color, frames, 0,
+                                  color == 3 ? 400.0f : 404.0f, color == 3 ? 5.0f : 6.0f);
+            preview = formatted;
+        } else preview = PackedText::at(mEditMode == EDIT_ROLLOUT ? kRolloutNames : kWallkickNames, color);
         if (mEditMode == EDIT_PRACTICE_DISPLAY) drawPracticeDisplay(menu, preview, mEditFirst, color);
         else if (mEditMode == EDIT_WALLKICK) drawWallkickDisplay(menu, preview, color);
         else if (mEditMode == EDIT_ROLLOUT) drawRolloutDisplay(menu, preview, color);

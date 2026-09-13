@@ -6,8 +6,7 @@ import re
 import subprocess
 import tempfile
 import unittest
-
-
+from test_practice_tape import function_source
 
 ROOT = Path(__file__).resolve().parents[1]
 JUMP, DIVE, GROUND = 0x02000880, 0x0080088A, 0x0C400201
@@ -69,19 +68,23 @@ void *memcpy(void*d,const void*s,unsigned long long n){
 struct Menu{};
 struct CreationStyle{int x,y;u8 scale,padding[3];};
 struct SusamuneWallkickStyleCfg{int x,y;u8 scale,padding[3],rgb[7][3];};
-char drawnText[80];unsigned drawnColor,drawnDisplay;
+char drawnText[80],drawnTexts[3][80];unsigned drawnColor,drawnDisplay,drawnMask,drawnColors[3];
 struct CreationExtras{
  void drawPracticeDisplay(Menu*,const char*text,unsigned display,int color){
-  unsigned i=0;while(text[i]){drawnText[i]=text[i];++i;}drawnText[i]=0;
-  drawnColor=color;drawnDisplay=display;}
+  unsigned i=0;while(text[i]){drawnText[i]=drawnTexts[display][i]=text[i];++i;}
+  drawnText[i]=drawnTexts[display][i]=0;
+  drawnColor=color;drawnDisplay=display;drawnColors[display]=color;drawnMask|=1u<<display;}
 } gCreationExtras;
 namespace JapaneseUi {const char *text(const char*s){return s;}}
-namespace Creation {
- int textWidth(const char*,int){return 200;}
- void drawTextBox(Menu*,const CreationStyle&,const u8(*rgb)[3],int,const char*text){
-  unsigned i=0;while(text[i]){drawnText[i]=text[i];++i;}drawnText[i]=0;drawnColor=rgb[0][0];}
-}
+enum {SUSAMUNE_PRACTICE_DISPLAY_GB,SUSAMUNE_PRACTICE_DISPLAY_JUMP,SUSAMUNE_PRACTICE_DISPLAY_BUTTSLIDE};
 '''
+        extras = ROOT / "src/creation_extras.cpp"
+        extras_source = extras.read_text(encoding="utf-8")
+        for pool in ("kGbTimingNames", "kButtslideNames"):
+            code += re.search(rf"const char {pool}\[\]\s*=\s*[^;]+;", extras_source).group() + "\n"
+        code += "namespace PackedText {" + function_source(
+            ROOT / "src/packed_text.cpp", "const char *at(") + "}\n"
+        code += function_source(extras, "void formatPracticeDisplay(") + "\n"
         code += tracking
         code += r'''
 #define API extern "C" __declspec(dllexport)
@@ -140,6 +143,8 @@ API void guardCase(unsigned which){
 API unsigned shown(){return MovementTimingDisplay::sPopupFrames;}
 API unsigned result(){return MovementTimingDisplay::sResult;}
 API unsigned resultFrames(){return MovementTimingDisplay::sResultFrames;}
+API unsigned jumpShown(){return MovementTimingDisplay::sJumpPopupFrames;}
+API unsigned jumpFrames(){return MovementTimingDisplay::sJumpResultFrames;}
 API unsigned phase(){return MovementTimingDisplay::sJumpPhase;}
 API float y(){return MovementTimingDisplay::sResultY;}
 API float v(){return MovementTimingDisplay::sResultV;}
@@ -148,7 +153,13 @@ API unsigned calls(){return retailCalls;}
 API unsigned cue(){return lastCue;}
 API unsigned graphicsPassed(){return lastGraphics==&graphics;}
 API void setFormatter(void*p){snprintf=(decltype(snprintf))p;}
-API const char *drawResult(){Menu menu;drawnText[0]=0;MovementTimingDisplay::draw(&menu);return drawnText;}
+API const char *drawResult(){
+ Menu menu;drawnText[0]=0;drawnMask=0;
+ for(unsigned i=0;i<3;i++)drawnTexts[i][0]=0;
+ MovementTimingDisplay::draw(&menu);return drawnText;}
+API const char *displayText(unsigned display){return drawnTexts[display];}
+API unsigned displayColor(unsigned display){return drawnColors[display];}
+API unsigned displayMask(){return drawnMask;}
 API unsigned color(){return drawnColor;}
 API unsigned display(){return drawnDisplay;}
 API void conflictingHook(){marioTimingVtable[8]=0;MovementTimingDisplay::onStageSetup();}
@@ -245,6 +256,7 @@ API unsigned retailReady(unsigned back,unsigned timer,unsigned mode,unsigned inp
                                 C.c_float, C.c_float, C.c_uint]
         cls.lib.y.restype = cls.lib.v.restype = C.c_float
         cls.lib.drawResult.restype = C.c_char_p
+        cls.lib.displayText.restype = C.c_char_p
         cls.lib.setFormatter.argtypes = [C.c_void_p]
         cls.crt = C.CDLL("msvcrt.dll")
         cls.lib.setFormatter(C.cast(cls.crt._snprintf, C.c_void_p))
@@ -259,6 +271,94 @@ API unsigned retailReady(unsigned back,unsigned timer,unsigned mode,unsigned inp
         self.tick(GROUND, JUMP, A, 230, 38)
         for _ in range(frames - 1):
             self.tick()
+
+    def combined_results(self):
+        self.lib.enable(1, 3)
+        self.lib.landAtQuarter(2)
+        self.lib.jumpAtPhase(3)
+        for _ in range(8):
+            self.tick()
+        self.tick(after=DIVE, pressed=B)
+
+    def test_three_displays_render_concurrently_without_prefixes(self):
+        self.combined_results()
+        self.lib.slide(0x00840452, 21, 2, 0)
+        self.lib.drawResult()
+        self.assertEqual(self.lib.displayMask(), 7)
+        self.assertEqual([self.lib.displayText(i) for i in range(3)],
+                         [b"On time 9f Y404 V6.0", b"1f qf3", b"Ready"])
+        self.assertEqual([self.lib.displayColor(i) for i in range(3)], [1, 0, 0])
+        self.lib.slide(0x00840452, 20, 2, 0)
+        self.lib.drawResult()
+        self.assertEqual(self.lib.displayMask(), 7)
+        self.assertEqual(self.lib.displayText(2), b"Waiting")
+        self.assertEqual(self.lib.displayColor(2), 1)
+
+    def test_new_jump_result_does_not_erase_or_change_gb_result(self):
+        self.combined_results()
+        self.lib.landAtQuarter(0)
+        self.tick(GROUND, GROUND)
+        self.tick(GROUND, GROUND)
+        self.lib.jumpAtPhase(1)
+        self.lib.drawResult()
+        self.assertEqual(self.lib.displayMask(), 3)
+        self.assertEqual(self.lib.displayText(0), b"On time 9f Y404 V6.0")
+        self.assertEqual(self.lib.displayText(1), b"3f qf1")
+        self.assertEqual((self.lib.shown(), self.lib.jumpShown()), (86, 90))
+
+    def test_result_timeouts_are_independent_and_holds_freeze_both(self):
+        self.combined_results()
+        self.assertEqual((self.lib.shown(), self.lib.jumpShown()), (90, 81))
+        for _ in range(300):
+            self.tick(GROUND, GROUND, active=False)
+        self.assertEqual((self.lib.shown(), self.lib.jumpShown()), (90, 81))
+        for _ in range(81):
+            self.tick(GROUND, GROUND)
+        self.lib.drawResult()
+        self.assertEqual((self.lib.shown(), self.lib.jumpShown()), (9, 0))
+        self.assertEqual(self.lib.displayMask(), 1)
+        for _ in range(9):
+            self.tick(GROUND, GROUND)
+        self.assertEqual(self.lib.drawResult(), b"")
+        self.assertEqual(self.lib.displayMask(), 0)
+
+    def test_toggles_clear_only_their_own_result_without_resurrection(self):
+        for gb, jump, expected in ((0, 3, 6), (1, 2, 5), (1, 1, 3)):
+            with self.subTest(gb=gb, jump=jump):
+                self.lib.init()
+                self.combined_results()
+                self.lib.enable(gb, jump)
+                self.tick(GROUND, GROUND)
+                self.lib.slide(0x00840452, 21, 2, 0)
+                self.lib.drawResult()
+                self.assertEqual(self.lib.displayMask(), expected)
+                self.lib.enable(1, 3)
+                self.tick(GROUND, GROUND)
+                self.lib.slide(0x00840452, 21, 2, 0)
+                self.lib.drawResult()
+                self.assertEqual(self.lib.displayMask(), expected | 4)
+
+    def test_stage_and_state_load_clear_both_results(self):
+        for reset in (self.lib.setup, self.lib.loaded):
+            self.lib.init()
+            self.combined_results()
+            reset()
+            self.assertEqual((self.lib.shown(), self.lib.jumpShown()), (0, 0))
+            self.assertEqual(self.lib.drawResult(), b"")
+
+    def test_gb_result_text_uses_shared_formatter_for_each_outcome(self):
+        for frames, y, expected in (
+            (8, 404, b"Early 8f Y404 V6.0"),
+            (9, 404, b"On time 9f Y404 V6.0"),
+            (10, 404, b"Late 10f Y404 V6.0"),
+            (9, 405, b"Check jump 9f Y405 V6.0"),
+            (270, 404, b"Late 255+f Y404 V6.0"),
+        ):
+            with self.subTest(frames=frames, y=y):
+                self.lib.init()
+                self.jump(frames)
+                self.tick(after=DIVE, pressed=B, y=y)
+                self.assertEqual(self.lib.drawResult(), expected)
 
     def test_ninth_completed_frame_uses_pre_dive_y_and_velocity(self):
         self.jump(9)
@@ -361,7 +461,7 @@ API unsigned retailReady(unsigned back,unsigned timer,unsigned mode,unsigned inp
                     self.lib.enable(0, 1)
                     self.lib.landAtQuarter(landing)
                     self.lib.jumpAtPhase(phase)
-                    self.assertEqual((self.lib.result(), self.lib.resultFrames()), (4, 1))
+                    self.assertEqual((self.lib.jumpShown(), self.lib.jumpFrames()), (90, 1))
                     self.assertEqual(self.lib.phase(), phase)
 
     def test_jump_waits_and_holds_are_separate(self):
@@ -372,7 +472,7 @@ API unsigned retailReady(unsigned back,unsigned timer,unsigned mode,unsigned inp
         for _ in range(300):
             self.tick(GROUND, GROUND, active=False)
         self.lib.jumpAtPhase(3)
-        self.assertEqual((self.lib.resultFrames(), self.lib.phase()), (6, 3))
+        self.assertEqual((self.lib.jumpFrames(), self.lib.phase()), (6, 3))
 
     def test_landing_jump_shows_one_through_six_then_late_with_qf(self):
         for frames in (1, 2, 3, 4, 5, 6, 7, 252, 1001):
@@ -383,9 +483,9 @@ API unsigned retailReady(unsigned back,unsigned timer,unsigned mode,unsigned inp
                 for _ in range(frames - 1):
                     self.tick(GROUND, GROUND)
                 self.lib.jumpAtPhase(3)
-                self.assertEqual(self.lib.resultFrames(), min(frames, 7))
+                self.assertEqual(self.lib.jumpFrames(), min(frames, 7))
                 label = f"{frames}f" if frames <= 6 else "Late"
-                self.assertEqual(self.lib.drawResult().decode(), f"Jump: {label} QF3")
+                self.assertEqual(self.lib.drawResult().decode(), f"{label} qf3")
                 self.assertEqual(self.lib.color(), min(frames, 7) - 1)
 
     def test_landing_clock_starts_at_most_recent_landing_not_stage_start(self):
@@ -394,15 +494,15 @@ API unsigned retailReady(unsigned back,unsigned timer,unsigned mode,unsigned inp
             self.tick(GROUND, GROUND)
         self.lib.landAtQuarter(3)
         self.lib.jumpAtPhase(1)
-        self.assertEqual(self.lib.drawResult(), b"Jump: 1f QF1")
+        self.assertEqual(self.lib.drawResult(), b"1f qf1")
         self.lib.landAtQuarter(0)
         for _ in range(6):
             self.tick(GROUND, GROUND)
         self.lib.jumpAtPhase(2)
-        self.assertEqual(self.lib.drawResult(), b"Jump: Late QF2")
+        self.assertEqual(self.lib.drawResult(), b"Late qf2")
         self.lib.landAtQuarter(2)
         self.lib.jumpAtPhase(0)
-        self.assertEqual(self.lib.drawResult(), b"Jump: 1f QF0")
+        self.assertEqual(self.lib.drawResult(), b"1f qf0")
 
     def test_landing_history_is_cleared_on_stage_and_state_load(self):
         for reset in (self.lib.setup, self.lib.loaded):
@@ -415,16 +515,16 @@ API unsigned retailReady(unsigned back,unsigned timer,unsigned mode,unsigned inp
                 self.assertEqual(self.lib.drawResult(), b"")
                 self.lib.landAtQuarter(0)
                 self.lib.jumpAtPhase(2)
-                self.assertEqual(self.lib.drawResult(), b"Jump: 1f QF2")
+                self.assertEqual(self.lib.drawResult(), b"1f qf2")
 
     def test_jump_requires_observed_landing_and_disallows_walkoff(self):
         self.lib.enable(0, 1)
         self.tick(GROUND, JUMP, A)
-        self.assertEqual(self.lib.shown(), 0)
+        self.assertEqual(self.lib.jumpShown(), 0)
         self.lib.landAtQuarter(1)
         self.tick(GROUND, 0x0000088C)
         self.tick(GROUND, JUMP, A)
-        self.assertEqual(self.lib.shown(), 0)
+        self.assertEqual(self.lib.jumpShown(), 0)
 
     def test_retained_foreign_hook_is_never_overwritten(self):
         self.lib.conflictingHook()
@@ -474,7 +574,7 @@ API unsigned retailReady(unsigned back,unsigned timer,unsigned mode,unsigned inp
         for setting,frames in ((2,0),(3,90)):
             self.lib.init();self.lib.enable(0,setting);self.lib.landAtQuarter(1)
             self.lib.jumpAtPhase(2)
-            self.assertEqual(self.lib.shown(),frames)
+            self.assertEqual(self.lib.jumpShown(),frames)
 
     def test_live_feedback_selects_independent_style_and_target_color(self):
         self.lib.enable(0, 1)

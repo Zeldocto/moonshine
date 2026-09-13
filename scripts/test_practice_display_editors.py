@@ -39,6 +39,7 @@ struct Settings {static const char *name(SettingId){return "Setting";}};
 #define API extern "C" __declspec(dllexport)
 extern "C" void *memset(void*p,int v,unsigned long long n){u8*b=(u8*)p;while(n--)*b++=(u8)v;return p;}
 extern "C" void *memcpy(void*d,const void*s,unsigned long long n){u8*a=(u8*)d;const u8*b=(const u8*)s;while(n--)*a++=*b++;return d;}
+extern "C" int memcmp(const void*a,const void*b,unsigned long long n){for(unsigned i=0;i<n;++i)if(((const u8*)a)[i]!=((const u8*)b)[i])return ((const u8*)a)[i]-((const u8*)b)[i];return 0;}
 extern "C" unsigned long long strlen(const char*s){unsigned n=0;while(s[n])++n;return n;}
 struct TMarioGamePad {
  enum{A=1,B=2,X=4,Y=8,Z=16,START=32,L=64,R=128,DPAD_LEFT=256,DPAD_RIGHT=512,
@@ -60,9 +61,10 @@ const u8 kHealthDefaults[2][3]={{255,255,255},{0,255,255}};
             "CreationEditor::repeatInput", "CreationEditor::update"))
         code += extras[extras.index("const char kWallkickNames"):extras.index("inline int clampi")]
         code += "\n".join(function(extras, name) for name in (
-            "practiceDisplayName", "nativeTimerColorSlot", "copyRgb", "clampStyle",
+            "practiceDisplayName", "nativeTimerColorSlot", "copyRgb", "clampStyle", "storeStyle",
             "CreationExtras::defaultWordStyle", "defaultRecentIlStyle", "defaultSavestateFeedbackStyle",
-            "CreationExtras::defaultWallkickStyle", "defaultAchievementBannerStyle", "defaultToastStyle",
+            "CreationExtras::defaultWallkickStyle", "CreationExtras::defaultPracticeStyle",
+            "defaultAchievementBannerStyle", "defaultToastStyle",
             "defaultPbBannerStyle", "defaultStageSessionStyle", "defaultNativeTimerStyle",
             "CreationExtras::beginOverlayEditor", "CreationExtras::beginWallkickEditor",
             "CreationExtras::beginRolloutEditor", "CreationExtras::beginDustEditor",
@@ -78,10 +80,14 @@ void CreationExtras::clampWord(int){}
 void CreationExtras::updateKeyboard(TMarioGamePad*){}
 struct Menu{};
 CreationStyle drawnStyle;u8 drawnRgb[3];unsigned draws;
-namespace Creation {void drawTextBox(Menu*,const CreationStyle&s,const u8(*rgb)[3],u16,const char*,bool,u16){
+namespace Creation {void drawTextBox(Menu*menu,const CreationStyle&s,const u8(*rgb)[3],u16,const char*text,bool,u16){
+ if(!menu||!text)return;
  drawnStyle=s;memcpy(drawnRgb,rgb,3);++draws;}}
 '''
-        code += function(extras, "CreationExtras::drawPracticeDisplay")
+        code += "\n".join(function(extras, name) for name in (
+            "drawMovementFeedback", "CreationExtras::drawPracticeDisplay",
+            "CreationExtras::drawWallkickDisplay", "CreationExtras::drawRolloutDisplay",
+            "CreationExtras::drawDustDisplay"))
         code += r'''
 CreationExtras state;
 static u32 visualCopy(u8*out){
@@ -144,6 +150,12 @@ API unsigned scratchCheck(){
 API void stage(SusamunePracticeDisplayStyleCfg*out){state.stagePracticeDisplaysInto(out);}
 API void adopt(const SusamunePracticeDisplayStyleCfg*in){state.adoptPracticeDisplays(in);}
 API void draw(unsigned display,unsigned color){Menu menu;state.drawPracticeDisplay(&menu,"Long timing preview",display,color);}
+API void drawOld(unsigned display,int color,unsigned missing){
+ Menu menu;Menu*p=missing==1?nullptr:&menu;const char*t=missing==2?nullptr:"Old timing preview";
+ if(display==0)state.drawWallkickDisplay(p,t,color);
+ else if(display==1)state.drawRolloutDisplay(p,t,color);
+ else state.drawDustDisplay(p,t,color);
+}
 API unsigned drawn(unsigned field){if(field==0)return draws;if(field==1)return drawnStyle.x;
  if(field==2)return drawnStyle.y;if(field==3)return drawnStyle.scale;return drawnRgb[field-4];}
 '''
@@ -245,6 +257,46 @@ API unsigned drawn(unsigned field){if(field==0)return draws;if(field==1)return d
             self.lib.adopt(invalid)
             self.lib.stage(saved)
             self.assertEqual(bytes(saved), before)
+
+    def test_only_exact_untouched_inherited_defaults_are_separated(self):
+        for changed in (None, "x", "rgb"):
+            with self.subTest(changed=changed):
+                cfg = (C.c_ubyte * 128)()
+                self.lib.stage(cfg)
+                old = (300).to_bytes(2, "little") + (106).to_bytes(2, "little")
+                old += bytes((90, 255, 0, 0, 0, 185, 100, 5)) + b"\xff" * 21
+                for display in range(3):
+                    offset = 8 + display * 36
+                    cfg[offset:offset+33] = old
+                    if changed == "x":
+                        cfg[offset] += 1
+                    if changed == "rgb":
+                        cfg[offset+12+20] = 254
+                self.lib.adopt(cfg)
+                saved = (C.c_ubyte * 128)()
+                self.lib.stage(saved)
+                for display in range(3):
+                    offset = 8 + display * 36
+                    if changed:
+                        self.assertEqual(bytes(saved[offset:offset+33]), bytes(cfg[offset:offset+33]))
+                    else:
+                        self.assertEqual(int.from_bytes(saved[offset+2:offset+4], "little"), (106,132,156)[display])
+                        self.assertEqual(saved[offset+4], 70 if display == 2 else 90)
+                        self.assertEqual(saved[offset+9], 128 if display == 2 else 185)
+                        self.assertEqual(saved[offset+11], 2 if display == 2 else 5)
+
+    def test_shared_old_display_dispatch_keeps_colour_bounds_and_null_guards(self):
+        for display, count in enumerate((7, 5, 7)):
+            for color in (-10, 0, count-1, count+10):
+                with self.subTest(display=display, color=color):
+                    self.lib.reset()
+                    self.lib.drawOld(display, color, 0)
+                    self.assertEqual(self.lib.drawn(0), 1)
+                    self.assertEqual(self.lib.drawn(4),
+                                     (30, 90, 60)[display] + max(0, min(color, count-1)))
+                    for missing in (1, 2):
+                        self.lib.drawOld(display, color, missing)
+                        self.assertEqual(self.lib.drawn(0), 1)
 
 
 if __name__ == "__main__":

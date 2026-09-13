@@ -31,7 +31,9 @@ struct SusamuneCfg;
 enum SettingId {
     SUSAMUNE_SETTING_LIST(SUSAMUNE_SETTING_ENUM)
 
-    SETTING_COUNT
+    SETTING_COUNT,
+    // UI-only alias: use cycle/valueLabel, never index the serialized values.
+    SETTING_BUTTSLIDE_DISPLAY = SETTING_COUNT
 };
 #undef SUSAMUNE_SETTING_ENUM
 
