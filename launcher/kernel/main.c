@@ -40,6 +40,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "SusamuneCrash.h"
 #include "SusamuneGhost.h"
 #include "SusamuneStateStorage.h"
+#include "MoonshineLayout.h"
 #include "susamune/susamune_cfg.h"
 
 #include "diskio.h"
@@ -394,6 +395,7 @@ int _main( int argc, char *argv[] )
 	SusamuneCfgInit();
 	SusamuneGhostInit();
 	SusamuneStateStorageInit();
+	MoonshineLayoutInit();
 	SusamuneCrashInit();
 
 	BootStatus(10, s_size, s_cnt);
@@ -547,6 +549,10 @@ int _main( int argc, char *argv[] )
 		else if(SusamuneStateStoragePending())
 		{
 			SusamuneStateStorageService();
+		}
+		else if(MoonshineLayoutPending())
+		{
+			MoonshineLayoutService();
 		}
 		else if(SaveCard == true) /* DI IRQ indicates we might read async, so dont write at the same time */
 		{

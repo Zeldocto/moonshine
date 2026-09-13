@@ -211,7 +211,9 @@
     X(SETTING_FAVORITES_EXTRA_6,             "favorites_extra_6")             \
     X(SETTING_FAVORITES_EXTRA_7,             "favorites_extra_7")             \
     X(SETTING_TAS_BANNER,                    "tas_banner")                    \
-    X(SETTING_FREE_CAMERA_SMOOTHING,         "free_camera_smoothing")
+    X(SETTING_FREE_CAMERA_SMOOTHING,         "free_camera_smoothing")          \
+    X(SETTING_GB_SKIP_DISPLAY,                "gb_skip_display")                \
+    X(SETTING_JUMP_DISPLAY,                   "jump_display")
 
 
 #endif  // SUSAMUNE_SETTINGS_LIST_H

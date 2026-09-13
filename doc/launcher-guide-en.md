@@ -232,7 +232,23 @@ Native HUD colours has separate controls for the normal health counter and under
 
 Metadata has Field gap, Row gap, Fields per row and Value widths. Horizontal layout puts several fields on each row. Compact widths reduce empty space.
 
-Rollout and dust controls are also beside their settings under HUD and displays > Movement feedback.
+Rollout and dust controls are also beside their settings under HUD and displays > Movement displays.
+
+## Layout profiles and movement timing
+
+Display > Layout profiles stores five named layouts per game version. Y saves the current layout, Start finishes naming, X+Start cancels, and A applies a saved profile. Replacing a profile asks first. Binds, practice rules and records stay separate.
+
+Profiles survive reboot in Moonshine data/layouts. Dolphin uses its Slot B memory card.
+
+Display > HUD and displays > Movement displays has Jump display and GB skip timing. Their Edit rows also open separate GB, Jump and Buttslide appearance controls. They are also in Layout editor > Practice feedback.
+
+Jump display shows 1f-6f after landing, then Late, with the takeoff's QF0-3 phase. Each landing starts a fresh count. Paused frames do not count.
+
+Jump display and Buttslide display have separate On/Off toggles. Both can be shown together. The compact Ready / Waiting cue shows when the game can accept your jump during a slide; the cue follows the current surface and slide state. It does not press A for you.
+
+GB skip timing checks an ordinary full A jump followed by B. The no-hover target is 9 airborne frames, Y404 and vertical speed 6. Early/On time/Late reports timing, not clip success.
+
+Fast Any% starts Pinna routes on the beach and Noki 3 outside the bottle. A secret retry still advances the loader after finishing, but cannot earn a clean full-level PB or playlist best.
 
 ## Mario and FLUDD colours
 

@@ -10,17 +10,19 @@
 #include <SMS/System/Application.hxx>
 #include <SMS/System/CardManager.hxx>
 #include "susamune/addresses.hxx"
+#include "susamune/layout_profile.h"
 
 namespace EmulatorPersistence {
 namespace {
 
 constexpr u32 kRecordMagic = 0x53554346u;  // 'SUCF'
-constexpr u16 kRecordVersion = 10;
+constexpr u16 kRecordVersion = 11;
 constexpr u32 kCfgSizeV6 = 5144;
 constexpr u32 kCfgSizeV7 = 5152;
 constexpr u32 kRecordPayloadSizeV8 = sizeof(SusamuneCfg) + sizeof(SusamuneMarioColorsCfg);
 constexpr u32 kRecordPayloadSizeV9 = kRecordPayloadSizeV8 + sizeof(SusamuneFluddColorsCfg);
-constexpr u32 kRecordPayloadSize = kRecordPayloadSizeV9 + sizeof(SusamuneILEpisodesCfg);
+constexpr u32 kRecordPayloadSizeV10 = kRecordPayloadSizeV9 + sizeof(SusamuneILEpisodesCfg);
+constexpr u32 kRecordPayloadSize = kRecordPayloadSizeV10 + sizeof(SusamunePracticeDisplayStyleCfg);
 constexpr u32 kSectorSize = 0x2000;
 constexpr u32 kFileSize = kSectorSize * 2;
 constexpr char kFileName[] = "susamune_settings";
@@ -37,6 +39,7 @@ struct Record {
     SusamuneMarioColorsCfg marioColors;
     SusamuneFluddColorsCfg fluddColors;
     SusamuneILEpisodesCfg ilEpisodes;
+    SusamunePracticeDisplayStyleCfg practiceDisplays;
     u8 padding[kSectorSize - 32 - kRecordPayloadSize];
 };
 static_assert(sizeof(Record) == kSectorSize, "card record must fill one sector");
@@ -122,6 +125,7 @@ struct State {
     SusamuneMarioColorsCfg marioColors;
     SusamuneFluddColorsCfg fluddColors;
     SusamuneILEpisodesCfg ilEpisodes;
+    SusamunePracticeDisplayStyleCfg practiceDisplays;
     DVDDiskID diskID;
     u32 requested;
     u32 completed;
@@ -166,7 +170,7 @@ void initBlank(SusamuneCfg *cfg) {
                  SUSAMUNE_CFG_FLAG_MOVEMENT_STYLE |
                  SUSAMUNE_CFG_FLAG_NATIVE_TIMER_STYLE |
                  SUSAMUNE_CFG_FLAG_MARIO_COLORS | SUSAMUNE_CFG_FLAG_FLUDD_COLORS |
-                 SUSAMUNE_CFG_FLAG_IL_EPISODES;
+                 SUSAMUNE_CFG_FLAG_IL_EPISODES | SUSAMUNE_CFG_FLAG_PRACTICE_DISPLAY_STYLE;
     cfg->ilingPbs.magic = SUSAMUNE_ILING_PB_MAGIC;
     cfg->ilingPbs.version = SUSAMUNE_ILING_PB_VERSION;
     cfg->ilingPbs.count = SUSAMUNE_ILING_PB_LEGACY_SLOT_COUNT;
@@ -325,6 +329,12 @@ void publishILEpisodes() {
     DCStoreRange(SUSAMUNE_IL_EPISODES_LIVE_PTR, sizeof(sState->ilEpisodes));
 }
 
+void publishPracticeDisplays() {
+    memcpy(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR, &sState->practiceDisplays,
+           sizeof(sState->practiceDisplays));
+    DCStoreRange(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR, sizeof(sState->practiceDisplays));
+}
+
 u32 checksum(Record *record) {
     const u32 saved = record->checksum;
     record->checksum = 0;
@@ -428,6 +438,16 @@ bool validV9(const Record *source) {
            checksum(record) == record->checksum;
 }
 
+bool validV10(const Record *source) {
+    Record *record = const_cast<Record *>(source);
+    return record->magic == kRecordMagic && record->version == 10 &&
+           record->payloadSize == kRecordPayloadSizeV10 &&
+           record->gameVersion == SUSAMUNE_GAME_VERSION &&
+           record->cfg.magic == SUSAMUNE_CFG_MAGIC &&
+           record->cfg.version == SUSAMUNE_CFG_VERSION &&
+           checksum(record) == record->checksum;
+}
+
 void migrateRecordV7(SusamuneCfg *cfg, SusamuneMarioColorsCfg *colors,
                      const SusamuneCfg *old) {
     memcpy(cfg, old, kCfgSizeV7);
@@ -517,6 +537,7 @@ s32 writeRecordLocked() {
     memcpy(&record->marioColors, &sState->marioColors, sizeof(sState->marioColors));
     memcpy(&record->fluddColors, &sState->fluddColors, sizeof(sState->fluddColors));
     memcpy(&record->ilEpisodes, &sState->ilEpisodes, sizeof(sState->ilEpisodes));
+    memcpy(&record->practiceDisplays, &sState->practiceDisplays, sizeof(sState->practiceDisplays));
     record->checksum = checksum(record);
     OSUnlockMutex(&sState->mutex);
 
@@ -545,6 +566,167 @@ s32 writeRecordLocked() {
     return result;
 }
 
+u32 layoutSlotLocked(MoonshineLayoutMailbox *mailbox, u32 slot, u32 operation) {
+    char name[] = "moonshine_layout_1";
+    name[sizeof(name) - 2] = (char)('1' + slot);
+    CARDFileInfo file;
+    bool created = false;
+    s32 result = CARDOpen(CARD_SLOTB, name, &file);
+    if (result == CARD_ERROR_NOFILE) {
+        mailbox->presentMask &= ~(1u << slot);
+        mailbox->badMask &= ~(1u << slot);
+        mailbox->generations[slot] = 0;
+        memset(mailbox->names[slot], 0, MOONSHINE_LAYOUT_NAME_SIZE);
+        if (operation == MOONSHINE_LAYOUT_LIST) return 0;
+        if (mailbox->expectedGeneration) return MOONSHINE_LAYOUT_ERROR_CHANGED;
+        if (operation == MOONSHINE_LAYOUT_LOAD) return MOONSHINE_LAYOUT_ERROR_EMPTY;
+        result = CARDCreate(CARD_SLOTB, name, kFileSize, &file);
+        created = result == CARD_ERROR_READY;
+    }
+    if (result != CARD_ERROR_READY) return errorCode(result);
+    CARDStat fileStatus;
+    result = CARDGetStatus(CARD_SLOTB, file.mFileNo, &fileStatus);
+    if (result != CARD_ERROR_READY || fileStatus.mLength != kFileSize) {
+        CARDClose(&file);
+        mailbox->badMask |= 1u << slot;
+        return result == CARD_ERROR_READY ? MOONSHINE_LAYOUT_ERROR_INVALID : errorCode(result);
+    }
+    // CARDCreate publishes recycled blocks before any file data is written.
+    // The directory's comment address commits initialization independently.
+    if (fileStatus.mCommentAddr != kSectorSize - 64u) {
+        mailbox->presentMask &= ~(1u << slot);
+        mailbox->badMask |= 1u << slot;
+        mailbox->generations[slot] = 0;
+        memset(mailbox->names[slot], 0, MOONSHINE_LAYOUT_NAME_SIZE);
+        if (operation != MOONSHINE_LAYOUT_SAVE || mailbox->expectedGeneration) {
+            const s32 closed = CARDClose(&file);
+            if (closed != CARD_ERROR_READY) return errorCode(closed);
+            return mailbox->expectedGeneration ? MOONSHINE_LAYOUT_ERROR_CHANGED :
+                operation == MOONSHINE_LAYOUT_LIST ? 0u : MOONSHINE_LAYOUT_ERROR_INVALID;
+        }
+        created = true;
+    }
+    u8 *sector = reinterpret_cast<u8 *>(gpCardManager->mCARDBlock);
+    MoonshineLayoutFile *record = reinterpret_cast<MoonshineLayoutFile *>(sector);
+    static_assert(sizeof(*record) <= kSectorSize, "layout must fit a CARD sector");
+    u32 generation = 0, best = 1;
+    char bestName[MOONSHINE_LAYOUT_NAME_SIZE] = {};
+    bool invalid = false;
+    for (u32 copy = 0; !created && copy < 2; ++copy) {
+        result = CARDRead(&file, sector, kSectorSize, copy * kSectorSize);
+        if (result != CARD_ERROR_READY) break;
+        if (!MoonshineLayoutValid(record)) { invalid = true; continue; }
+        if (!generation || newer(record->generation, generation)) {
+            generation = record->generation;
+            best = copy;
+            memcpy(bestName, record->name, sizeof(bestName));
+        }
+    }
+    if (created) {
+        memset(sector, 0, kSectorSize);
+        result = CARDWrite(&file, sector, kSectorSize, kSectorSize);
+        if (result == CARD_ERROR_READY)
+            result = CARDRead(&file, sector, kSectorSize, kSectorSize);
+        if (result == CARD_ERROR_READY && MoonshineLayoutValid(record))
+            result = CARD_ERROR_IOERROR;
+    }
+    const s32 closed = CARDClose(&file);
+    if (result == CARD_ERROR_READY) result = closed;
+    if (result != CARD_ERROR_READY) {
+        mailbox->badMask |= 1u << slot;
+        return errorCode(result);
+    }
+    mailbox->presentMask &= ~(1u << slot);
+    mailbox->badMask &= ~(1u << slot);
+    if (generation) mailbox->presentMask |= 1u << slot;
+    else if (invalid) mailbox->badMask |= 1u << slot;
+    mailbox->generations[slot] = generation;
+    memcpy(mailbox->names[slot], bestName, sizeof(bestName));
+    if (operation == MOONSHINE_LAYOUT_LIST) return 0;
+    if (generation != mailbox->expectedGeneration) return MOONSHINE_LAYOUT_ERROR_CHANGED;
+    if (operation == MOONSHINE_LAYOUT_LOAD && !generation)
+        return invalid ? MOONSHINE_LAYOUT_ERROR_INVALID : MOONSHINE_LAYOUT_ERROR_EMPTY;
+
+    u32 expectedChecksum = 0;
+    if (operation == MOONSHINE_LAYOUT_SAVE) {
+        memset(sector, 0, kSectorSize);
+        memcpy(record, &mailbox->file, sizeof(*record));
+        u32 next = generation + 1;
+        if (!next) next = 1;
+        if (record->version != MOONSHINE_LAYOUT_VERSION || record->bytes != sizeof(*record) ||
+            !MoonshineLayoutValid(record) || record->generation != next)
+            return MOONSHINE_LAYOUT_ERROR_INVALID;
+        generation = next;
+        expectedChecksum = record->checksum;
+        best ^= 1u;
+    }
+    result = CARDOpen(CARD_SLOTB, name, &file);
+    if (result != CARD_ERROR_READY) return errorCode(result);
+    if (operation == MOONSHINE_LAYOUT_SAVE)
+        result = CARDWrite(&file, sector, kSectorSize, best * kSectorSize);
+    else result = CARDRead(&file, sector, kSectorSize, best * kSectorSize);
+    s32 closeResult = CARDClose(&file);
+    if (result == CARD_ERROR_READY) result = closeResult;
+    if (result != CARD_ERROR_READY) return errorCode(result);
+    if (operation == MOONSHINE_LAYOUT_SAVE) {
+        result = CARDOpen(CARD_SLOTB, name, &file);
+        if (result != CARD_ERROR_READY) return errorCode(result);
+        result = CARDRead(&file, sector, kSectorSize, best * kSectorSize);
+        closeResult = CARDClose(&file);
+        if (result == CARD_ERROR_READY) result = closeResult;
+        if (result != CARD_ERROR_READY) return errorCode(result);
+    }
+    if (!MoonshineLayoutValid(record)) return MOONSHINE_LAYOUT_ERROR_INVALID;
+    if (record->generation != generation || (expectedChecksum && record->checksum != expectedChecksum))
+        return MOONSHINE_LAYOUT_ERROR_CHANGED;
+    if (created) {
+        fileStatus.mCommentAddr = kSectorSize - 64u;
+        result = CARDSetStatus(CARD_SLOTB, file.mFileNo, &fileStatus);
+        if (result != CARD_ERROR_READY) return errorCode(result);
+    }
+    MoonshineLayoutUpgrade(record);
+    memcpy(&mailbox->file, record, sizeof(*record));
+    mailbox->presentMask |= 1u << slot;
+    mailbox->badMask &= ~(1u << slot);
+    mailbox->generations[slot] = generation;
+    memcpy(mailbox->names[slot], record->name, MOONSHINE_LAYOUT_NAME_SIZE);
+    return 0;
+}
+
+void layoutProfilesLocked() {
+    MoonshineLayoutMailbox *mailbox = MOONSHINE_LAYOUT_PPC_PTR;
+    const u32 operation = mailbox->operation;
+    u32 status = 0;
+    if (mailbox->magic != MOONSHINE_LAYOUT_MAILBOX_MAGIC ||
+        mailbox->version != MOONSHINE_LAYOUT_MAILBOX_VERSION ||
+        operation < MOONSHINE_LAYOUT_LIST || operation > MOONSHINE_LAYOUT_LOAD ||
+        mailbox->reservedControl[0] || mailbox->reservedControl[1] ||
+        (operation != MOONSHINE_LAYOUT_LIST && mailbox->slot >= MOONSHINE_LAYOUT_COUNT)) {
+        status = MOONSHINE_LAYOUT_ERROR_INVALID;
+    } else if (operation != MOONSHINE_LAYOUT_LIST &&
+               mailbox->expectedGeneration != mailbox->generations[mailbox->slot]) {
+        status = MOONSHINE_LAYOUT_ERROR_CHANGED;
+    } else if (operation == MOONSHINE_LAYOUT_SAVE &&
+        (mailbox->file.version != MOONSHINE_LAYOUT_VERSION || mailbox->file.bytes != sizeof(mailbox->file) ||
+         !MoonshineLayoutValid(&mailbox->file) || mailbox->file.generation !=
+         (mailbox->expectedGeneration == 0xffffffffu ? 1u : mailbox->expectedGeneration + 1u))) {
+        status = MOONSHINE_LAYOUT_ERROR_INVALID;
+    } else {
+        gpCardManager->unmount();
+        const s32 mounted = mount(gpCardManager->mCardWorkArea);
+        if (mounted != CARD_ERROR_READY) status = errorCode(mounted);
+        else {
+            if (operation == MOONSHINE_LAYOUT_LIST) {
+                for (u32 slot = 0; slot < MOONSHINE_LAYOUT_COUNT && !status; ++slot)
+                    status = layoutSlotLocked(mailbox, slot, operation);
+            } else status = layoutSlotLocked(mailbox, mailbox->slot, operation);
+            unmount();
+        }
+    }
+    mailbox->status = status;
+    mailbox->ackSeq = mailbox->requestSeq;
+}
+
 void initState() {
     sState = reinterpret_cast<State *>(SUSAMUNE_DOLPHIN_PERSIST_PPC_BASE);
     memset(sState, 0, sizeof(*sState));
@@ -554,9 +736,11 @@ void initState() {
     initMarioColors(&sState->marioColors);
     initFluddColors(&sState->fluddColors);
     initILEpisodes(&sState->ilEpisodes);
+    SusamunePracticeDisplayStyleInit(&sState->practiceDisplays);
     publishMarioColors();
     publishFluddColors();
     publishILEpisodes();
+    publishPracticeDisplays();
 }
 
 void setIdentity() {
@@ -608,6 +792,7 @@ s32 loadRecords(void *mountWork, Record *record) {
                           slot * kSectorSize);
         if (result != CARD_ERROR_READY) break;
         const bool current = valid(record);
+        const bool v10 = !current && validV10(record);
         const bool v9 = !current && validV9(record);
         const bool v8 = !current && validV8(record);
         const bool v7 = !current && !v8 && validV7(record);
@@ -618,17 +803,17 @@ s32 loadRecords(void *mountWork, Record *record) {
         const bool v2 = !current && !v5 && !v4 && !v3 && validV2(record);
         const bool v1 =
             !current && !v5 && !v4 && !v3 && !v2 && validV1(record);
-        if ((current || v9 || v8 || v7 || v6 || v5 || v4 || v3 || v2 || v1) &&
+        if ((current || v10 || v9 || v8 || v7 || v6 || v5 || v4 || v3 || v2 || v1) &&
             (!haveRecord || newer(record->generation, bestGeneration))) {
             initMarioColors(&sState->marioColors);
             initFluddColors(&sState->fluddColors);
             initILEpisodes(&sState->ilEpisodes);
-            if (current || v9 || v8) {
+            if (current || v10 || v9 || v8) {
                 memcpy(&sState->cfg, &record->cfg, sizeof(sState->cfg));
                 memcpy(&sState->marioColors, &record->marioColors,
                        sizeof(sState->marioColors));
-                if (current || v9) memcpy(&sState->fluddColors, &record->fluddColors, sizeof(sState->fluddColors));
-                if (current) memcpy(&sState->ilEpisodes, &record->ilEpisodes, sizeof(sState->ilEpisodes));
+                if (current || v10 || v9) memcpy(&sState->fluddColors, &record->fluddColors, sizeof(sState->fluddColors));
+                if (current || v10) memcpy(&sState->ilEpisodes, &record->ilEpisodes, sizeof(sState->ilEpisodes));
             } else if (v7) {
                 migrateRecordV7(&sState->cfg, &sState->marioColors, &record->cfg);
             } else if (v6) {
@@ -644,7 +829,11 @@ s32 loadRecords(void *mountWork, Record *record) {
                                  reinterpret_cast<const u8 *>(&record->cfg),
                                  oldSize, v4 || v5, v5);
             }
-            sState->cfg.flags |= SUSAMUNE_CFG_FLAG_FLUDD_COLORS | SUSAMUNE_CFG_FLAG_IL_EPISODES;
+            if (current) memcpy(&sState->practiceDisplays, &record->practiceDisplays,
+                                sizeof(sState->practiceDisplays));
+            else SusamunePracticeDisplayStyleFromWallkick(&sState->practiceDisplays, &sState->cfg.wallkickStyle);
+            sState->cfg.flags |= SUSAMUNE_CFG_FLAG_FLUDD_COLORS | SUSAMUNE_CFG_FLAG_IL_EPISODES |
+                                SUSAMUNE_CFG_FLAG_PRACTICE_DISPLAY_STYLE;
             bestGeneration = record->generation;
             sState->activeRecord = slot;
             sState->initialSave = !current;
@@ -670,6 +859,7 @@ s32 loadRecords(void *mountWork, Record *record) {
 InitResult init() {
     if (sInitResult != INIT_WAITING) return sInitResult;
     if (!gpCardManager) return INIT_WAITING;
+    memset(MOONSHINE_LAYOUT_PPC_PTR, 0, sizeof(MoonshineLayoutMailbox));
     const s32 probeResult = probe();
     if (probeResult != CARD_ERROR_READY) {
         sInitError = errorCode(probeResult);
@@ -705,6 +895,12 @@ InitResult init() {
     publishMarioColors();
     publishFluddColors();
     publishILEpisodes();
+    publishPracticeDisplays();
+    MoonshineLayoutMailbox *layout = MOONSHINE_LAYOUT_PPC_PTR;
+    memset(layout, 0, sizeof(*layout));
+    layout->magic = MOONSHINE_LAYOUT_MAILBOX_MAGIC;
+    layout->version = MOONSHINE_LAYOUT_MAILBOX_VERSION;
+    sState->cfg.flags |= MOONSHINE_LAYOUT_CFG_FLAG;
     sInitResult = INIT_READY;
     return sInitResult;
 }
@@ -716,7 +912,9 @@ void service() {
     const u32 ticket = sState->requested;
     const bool pending = ticket != sState->completed;
     OSUnlockMutex(&sState->mutex);
-    if (!pending) {
+    const MoonshineLayoutMailbox *layout = MOONSHINE_LAYOUT_PPC_PTR;
+    const bool layoutPending = layout->requestSeq != layout->ackSeq;
+    if (!pending && !layoutPending) {
         sState->idleObserved = false;
         return;
     }
@@ -742,14 +940,18 @@ void service() {
     // unmount() normally replaces this with CARDUnmount's result. Keep the
     // result Sunshine's state machine is waiting to observe.
     const s32 gameStatus = gpCardManager->mLastStatus;
-    const s32 result = writeRecordLocked();
+    s32 result = CARD_ERROR_READY;
+    if (pending) result = writeRecordLocked();
+    else layoutProfilesLocked();
     gpCardManager->mLastStatus = gameStatus;
     OSUnlockMutex(&gpCardManager->mMutex);
 
-    OSLockMutex(&sState->mutex);
-    sState->completedStatus = result;
-    sState->completed = ticket;
-    OSUnlockMutex(&sState->mutex);
+    if (pending) {
+        OSLockMutex(&sState->mutex);
+        sState->completedStatus = result;
+        sState->completed = ticket;
+        OSUnlockMutex(&sState->mutex);
+    }
 }
 
 SusamuneCfg *lock() {
@@ -770,6 +972,8 @@ u32 commit() {
            sizeof(sState->fluddColors));
     memcpy(&sState->ilEpisodes, SUSAMUNE_IL_EPISODES_LIVE_PTR,
            sizeof(sState->ilEpisodes));
+    memcpy(&sState->practiceDisplays, SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR,
+           sizeof(sState->practiceDisplays));
     const u32 ticket = ++sState->requested;
     OSUnlockMutex(&sState->mutex);
     return ticket;

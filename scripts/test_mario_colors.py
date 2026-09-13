@@ -191,7 +191,8 @@ struct Settings{static bool favoriteable(int){return false;}void toggleFavorite(
 namespace RecordsPersistence{void resetAll(){}}
 struct Extras{bool editing(){return false;}void updateEditor(TMarioGamePad*){}
  void beginSavestateFeedbackEditor(){}void beginNativeTimerEditor(){}
- void beginWallkickEditor(){}void beginRolloutEditor(){}void beginDustEditor(){}}gCreationExtras;
+ void beginWallkickEditor(){}void beginRolloutEditor(){}void beginDustEditor(){}
+ void beginPracticeDisplayEditor(unsigned){}}gCreationExtras;
 int wrap(int value,int n){return (value+n)%n;}
 const u8 kAppearanceMarioSettings[]={1,2,3};const u8 otherSettings[]={4};
 class CategorySettingsTab{public:

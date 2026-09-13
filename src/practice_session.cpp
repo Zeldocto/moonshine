@@ -360,6 +360,8 @@ bool replayPresentationSetting(SettingId id) {
     case SETTING_METADATA_HORIZONTAL:
     case SETTING_GHOST_INPUTS:
     case SETTING_TAS_BANNER:
+    case SETTING_GB_SKIP_DISPLAY:
+    case SETTING_JUMP_DISPLAY:
         return true;
     default:
         return false;

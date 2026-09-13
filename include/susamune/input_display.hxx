@@ -49,6 +49,7 @@ public:
     void updateEditor(TMarioGamePad *pad);
     void drawEditor(Menu *menu) const;
     bool editing() const { return mEditor.editing(); }
+    bool visible() const { return mVisible; }
 
 private:
     static CreationStyle defaultStyle();

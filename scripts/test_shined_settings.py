@@ -104,11 +104,28 @@ extern "C" __declspec(dllexport) void toggle(int id){settings.toggleFavorite((Se
 
     def test_internal_and_out_of_range_ids_cannot_modify_storage(self):
         before = [self.lib.get(i) for i in range(len(self.ids))]
-        for i in [-1, len(self.ids), 999] + [i for i, name in enumerate(self.names) if not name]:
+        for i in [-1, len(self.ids) + 1, 999] + [i for i, name in enumerate(self.names) if not name]:
             self.assertFalse(self.lib.eligible(i))
             self.assertFalse(self.lib.favorite(i))
             self.lib.toggle(i)
         self.assertEqual([self.lib.get(i) for i in range(len(self.ids))], before)
+
+    def test_jump_and_buttslide_have_independent_persisted_favourite_bits(self):
+        jump, buttslide = self.ids.index('SETTING_JUMP_DISPLAY'), len(self.ids)
+        self.assertTrue(self.lib.eligible(buttslide))
+        banks = [i for i, name in enumerate(self.ids) if 'FAVORITES' in name]
+        for chosen in (jump, buttslide):
+            self.lib.reset()
+            self.lib.toggle(chosen)
+            self.assertEqual([i for i in (jump, buttslide) if self.lib.favorite(i)], [chosen])
+            saved = {i:self.lib.get(i) for i in banks}
+            self.lib.reset()
+            for i,value in saved.items():self.lib.set(i,value)
+            self.assertEqual([i for i in (jump, buttslide) if self.lib.favorite(i)], [chosen])
+            self.lib.toggle(jump if chosen == buttslide else buttslide)
+            self.assertTrue(self.lib.favorite(jump))
+            self.assertTrue(self.lib.favorite(buttslide))
+            self.assertEqual(self.lib.get(jump), 0)
 
 
 if __name__ == "__main__":

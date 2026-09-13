@@ -35,10 +35,12 @@ struct JUTGamePad {enum{A=0x100,B=0x200,X=0x400,Y=0x800,Z=0x10,START=0x1000};
  struct Status{u16 mButton;};static Status mPadStatus[1];};
 JUTGamePad::Status JUTGamePad::mPadStatus[1];
 struct TMarioGamePad {enum{CSTICK_UP=1,CSTICK_DOWN=2,CSTICK_LEFT=4,CSTICK_RIGHT=8};
- enum{L=0x40,R=0x20};
+ enum{DPAD_LEFT=1,DPAD_RIGHT=2,DPAD_DOWN=4,DPAD_UP=8,L=0x40,R=0x20,
+ A=0x100,B=0x200,X=0x400,Y=0x800};
  struct {u32 mRapidInput;}mButtons;u32 nav;};
 static int calls,lastAction,closeCount,bindTarget,cleared,confirmCount,cancelCount;
 static bool overwrite,replacePrompt,phaseBusy,dirtyState;
+static int saves,renames;static bool acceptSave;
 static u16 closeMask=0x1800,previousButtons;
 struct Settings { bool value=true,star=false; void cycle(SettingId,int){value=!value;}
  void toggleFavorite(SettingId){star=!star;} bool dirty(){return false;} }gSettings;
@@ -54,12 +56,16 @@ struct Binds {bool rec;bool recording(){return rec;}void cancelRecord(){rec=fals
 void updateAchievementBanner(){}bool rngControlInvalidatesIl(){return false;}
 namespace WarpWheel {bool promptShown(){return false;}}
 namespace StageTargets {void service(Menu*){}}
+namespace LayoutProfiles {const char*poll(){return nullptr;}}
 namespace MarioColors {bool dirty(){return false;}}
 namespace FluddColors {bool dirty(){return false;}}
 struct Display {bool dirty(){return false;}void update(){}}gInputDisplay,gMetadataDisplay,gQftDisplay,gCreationExtras;
 struct StateManager {struct Info{u32 generation;};Info slotInfo(u32){return {11};}}manager,*gSavestateMgr=&manager;
 int wrap(int v,int count){return (v+count)%count;}int clampi(int v,int lo,int hi){return v<lo?lo:v>hi?hi:v;}
-void updateCreationKeyboardText(TMarioGamePad*,char*,u8&,int,u8&,bool&,u8&){}
+const char gCreationLettersLower[]="abcdefghijklmnopqrstuvwxyz012345";
+const char gCreationLettersUpper[]="ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+const char gCreationSymbols[]="!@#$%^&*()_+-=[]{};':,.<>/?0123456";
+bool updateCreationKeyboardText(TMarioGamePad*,char*,u8&,u8,u8&,bool&,u8&);
 namespace PracticeSession {
 bool starting(){return false;}bool requestPauseToggle(bool){hit(6);return true;}
 bool requestStep(bool){hit(7);return true;}const char*status(){return "status";}
@@ -73,17 +79,17 @@ void cancelReplacement(){replacePrompt=phaseBusy=false;}
 bool checkpointOverwritePending(){return overwrite;}
 bool confirmCheckpointOverwrite(bool accept){overwrite=phaseBusy=false;if(accept)++confirmCount;else ++cancelCount;return true;}
 bool newProject(){hit(0);return true;}bool continueEditing(){hit(1);return true;}bool replay(){hit(2);return true;}
-bool save(const char*){hit(3);return true;}bool open(u32,u32){hit(4);return true;}
+bool save(const char*){++saves;return acceptSave;}bool open(u32,u32){hit(4);return true;}
 bool saveCheckpoint(u32 role){hit(10+role);overwrite=phaseBusy=true;return true;}
 bool loadCheckpoint(u32 role){hit(20+role);return true;}
-bool refresh(u32=0){return true;}bool rename(u32,u32,const char*){return true;}bool remove(u32,u32){return true;}
+bool refresh(u32=0){return true;}bool rename(u32,u32,const char*){++renames;return acceptSave;}bool remove(u32,u32){return true;}
 bool catalogReady(){return false;}const SusamuneStateCatalog&catalog(){static SusamuneStateCatalog c={};return c;}
 }
 '''
         body = r'''
 static void reset(){calls=lastAction=closeCount=confirmCount=cancelCount=0;bindTarget=cleared=-1;
  overwrite=replacePrompt=phaseBusy=dirtyState=gBinds.rec=false;JUTGamePad::mPadStatus[0].mButton=0;
- gSettings.value=true;gSettings.star=false;closeMask=0x1800;previousButtons=0;}
+ gSettings.value=true;gSettings.star=false;closeMask=0x1800;previousButtons=0;saves=renames=0;acceptSave=true;}
 static void press(TasProjectTab&t,u16 held,u32 nav=0){Menu m;TMarioGamePad p={};p.nav=nav;
  JUTGamePad::mPadStatus[0].mButton=held;t.update(&m,&p);}
 extern "C" __declspec(dllexport) int route(int page,int row,int button,int*out){
@@ -134,11 +140,26 @@ extern "C" __declspec(dllexport) int closePage(int page,int mask,int busy,int re
   pad.mButtons.mRapidInput=mask;menu.update(&pad);out[7]=menu.mShown;}
  return 0;
 }
+extern "C" __declspec(dllexport) void nameClose(int mask,int rename,int accept,int*out){
+ reset();TasProjectTab tab;memcpy(tab.mName,"Name",5);tab.beginKeyboard();tab.focus();
+ tab.mRename=rename!=0;acceptSave=accept!=0;
+ Menu menu;menu.mTabs[0]=&tab;TMarioGamePad pad={};closeMask=(u16)mask;
+ JUTGamePad::mPadStatus[0].mButton=(u16)mask;pad.mButtons.mRapidInput=mask;
+ menu.update(&pad);
+ out[0]=menu.mShown;out[1]=tab.mPage;out[2]=tab.mCursor;out[3]=tab.mLength;
+ out[4]=tab.mKeyPage;out[5]=tab.mUpper;out[6]=saves;out[7]=renames;out[8]=calls;
+ previousButtons=(u16)mask;menu.update(&pad);out[9]=menu.mShown;
+ JUTGamePad::mPadStatus[0].mButton=0;pad.mButtons.mRapidInput=0;menu.update(&pad);
+ previousButtons=0;JUTGamePad::mPadStatus[0].mButton=(u16)mask;
+ pad.mButtons.mRapidInput=mask;menu.update(&pad);out[10]=menu.mShown;
+}
 '''
         cls.tmp = tempfile.TemporaryDirectory()
         cls.addClassCleanup(cls.tmp.cleanup)
         source = Path(cls.tmp.name) / 'menu.cpp'
-        source.write_text(shim + raw + text + menu_update + body)
+        keyboard = function((ROOT / 'src/creation_extras.cpp').read_text(),
+                            'bool updateCreationKeyboardText(')
+        source.write_text(shim + keyboard + raw + text + menu_update + body)
         dll = source.with_suffix('.dll')
         result = subprocess.run([str(ROOT/'toolchain/clang++.exe'), '--target=x86_64-pc-windows-msvc',
             '-shared','-nostdlib','-fuse-ld=lld','-Wl,/noentry','-O2','-std=c++17',
@@ -194,8 +215,8 @@ extern "C" __declspec(dllexport) int closePage(int page,int mask,int busy,int re
             for cancel in (0,1):
                 self.assertEqual(self.lib.overwriteCase(shortcut,cancel),0)
 
-    def test_close_shortcut_exits_every_tas_page_without_running_its_action(self):
-        for page in range(6):
+    def test_close_shortcut_exits_non_naming_pages_without_running_its_action(self):
+        for page in (0, 1, 2, 4, 5):
             for mask in (0x1800, 0x140, 0x60):
                 for busy in (0, 1):
                     with self.subTest(page=page, mask=mask, busy=busy):
@@ -203,6 +224,42 @@ extern "C" __declspec(dllexport) int closePage(int page,int mask,int busy,int re
                         self.lib.closePage(page, mask, busy, 0, out)
                         self.assertEqual(list(out)[:4], [0, 0, 0, 0])
                         self.assertEqual(out[4], page)
+
+    def test_keyboard_owns_close_bind_for_each_typing_control(self):
+        # Menu::update and the real shared keyboard handle these inputs together.
+        for mask, cursor, length, page, upper in (
+                (1,31,4,0,0), (2,1,4,0,0), (4,8,4,0,0), (8,24,4,0,0),
+                (0x40,0,4,1,0), (0x20,0,4,1,0), (0x100,0,5,0,0),
+                (0x200,0,3,0,0), (0x400,0,5,0,0), (0x800,0,4,0,1),
+                (0x10,0,0,0,0)):
+            with self.subTest(mask=mask):
+                out=(C.c_int*11)()
+                self.lib.nameClose(mask,0,1,out)
+                self.assertEqual(list(out)[:9], [1,3,cursor,length,page,upper,0,0,0])
+                self.assertEqual(list(out)[9:], [1,1])
+
+    def test_keyboard_save_cancel_and_failed_save_keep_final_input_owned(self):
+        for rename in (0,1):
+            for cancel in (0,1):
+                for accept in (0,1):
+                    with self.subTest(rename=rename,cancel=cancel,accept=accept):
+                        mask=0x1000 | (0x400 if cancel else 0)
+                        out=(C.c_int*11)()
+                        self.lib.nameClose(mask,rename,accept,out)
+                        finished=cancel or accept
+                        self.assertEqual(out[0],1)  # No close on commit/cancel frame.
+                        self.assertEqual(out[1],0 if finished else 3)
+                        self.assertEqual(list(out)[6:9],
+                                         [int(not cancel and not rename),
+                                          int(not cancel and rename),0])
+                        self.assertEqual(out[9],1)  # Holding cannot close it either.
+                        self.assertEqual(out[10],0 if finished else 1)
+
+    def test_busy_named_page_keeps_close_bind_owned(self):
+        for mask in (4,0x1000,0x1800):
+            out=(C.c_int*8)()
+            self.lib.closePage(3,mask,1,0,out)
+            self.assertEqual(list(out)[:5],[1,0,0,0,3])
 
     def test_inline_recorder_and_its_commit_frame_keep_close_combo_until_fresh_press(self):
         for page in (0, 1):

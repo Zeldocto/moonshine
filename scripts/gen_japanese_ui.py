@@ -106,6 +106,17 @@ def font_glyph(font, index):
     return font[0x30 + index], packed
 
 
+def supplemental_glyphs(path=ROOT/'data/fonts/noto-japanese-supplement.json'):
+    result = {}
+    for key, glyph in json.loads(path.read_text(encoding='utf-8'))['glyphs'].items():
+        code, width, image = int(key, 16), glyph['width'], bytes.fromhex(glyph['image'])
+        chr(code).encode('cp932')
+        if code in result or not 1 <= width <= 24 or len(image) != 64 or not any(image):
+            raise ValueError(f'invalid supplemental glyph U+{code:04X}')
+        result[code] = width, image
+    return result
+
+
 def build(path=ROOT/'data/japanese_ui.tsv'):
     rows = catalogue(path)
     pool, offsets = bytearray(), {}
@@ -121,12 +132,19 @@ def build(path=ROOT/'data/japanese_ui.tsv'):
     source_map = {code: i for i, code in reversed(list(enumerate(source_codes)))}
     source_map[0x7E] = source_map[0x203E]
     font = yay0((ROOT/'data/fonts/droid-japanese.yay').read_bytes())
+    supplement = supplemental_glyphs()
+    if source_map.keys() & supplement.keys():
+        raise ValueError('supplemental glyph would replace a Droid glyph')
     glyphs = {}
     for code in codes:
-        if code not in source_map:
+        if code in source_map:
+            glyph = font_glyph(font, source_map[code])
+        elif code in supplement:
+            glyph = supplement[code]
+        else:
             raise ValueError(f'font lacks U+{code:04X}')
         encoded = chr(code).encode('cp932')
-        glyphs[int.from_bytes(encoded, 'big')] = font_glyph(font, source_map[code])
+        glyphs[int.from_bytes(encoded, 'big')] = glyph
     for name, old in TOKENS.items():
         glyphs[int(old, 16)] = glyphs[int(JA_TOKENS[name], 16)]
     glyph_table, pixels = bytearray(), bytearray()

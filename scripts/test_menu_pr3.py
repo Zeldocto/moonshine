@@ -62,6 +62,16 @@ class NestedMenuContracts(unittest.TestCase):
         )
         self.assertEqual(len(settings), len(categories))
         setting_category = dict(zip(settings, categories))
+        alias = "SETTING_BUTTSLIDE_DISPLAY"
+        self.assertNotIn(alias, setting_category)
+        self.assertIn(
+            f"{alias} = SETTING_COUNT", text("include/susamune/settings.hxx")
+        )
+        category_body = function(
+            text("src/settings.cpp"), r"SettingCategory Settings::category\(SettingId id\)"
+        )
+        self.assertIn(f"if (id == {alias}) id = SETTING_JUMP_DISPLAY;", category_body)
+        setting_category[alias] = setting_category["SETTING_JUMP_DISPLAY"]
 
         def page_ids(*arrays: str) -> list[str]:
             result: list[str] = []
@@ -141,7 +151,7 @@ class NestedMenuContracts(unittest.TestCase):
     def test_settings_hub_is_grouped_coherently(self) -> None:
         menu = text("src/menu.cpp")
         self.assertIn("{ inputReplay, camera, savestate, practice, rng, gameplay }", menu)
-        self.assertIn("{ creation, display, timer, cosmetics }", menu)
+        self.assertIn("{ creation, layoutProfiles, display, timer, cosmetics }", menu)
         self.assertIn('return "GAMEPLAY AND PRACTICE"', menu)
         self.assertIn('return "TIMING AND HUD"', menu)
         self.assertIn('return "LAYOUT AND CONTROLS"', menu)
@@ -328,9 +338,10 @@ class MovementStylePersistenceContracts(unittest.TestCase):
         self.assertIn("gCreationExtras.stageMovementInto(&cfg->movementStyle)", settings)
         self.assertIn("DCStoreRange((void *)&cfg->movementStyle", settings)
 
-    def test_dolphin_v5_migrates_to_v10(self) -> None:
+    def test_dolphin_v5_migrates_to_v11(self) -> None:
         emulator = text("src/emulator_persistence.cpp")
-        self.assertIn("constexpr u16 kRecordVersion = 10;", emulator)
+        self.assertIn("constexpr u16 kRecordVersion = 11;", emulator)
+        self.assertIn("const bool v10 = !current && validV10(record);", emulator)
         self.assertIn("const bool v9 = !current && validV9(record);", emulator)
         self.assertIn("initILEpisodes(&sState->ilEpisodes);", emulator)
         self.assertIn("struct RecordV5", emulator)

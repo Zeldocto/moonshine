@@ -235,7 +235,8 @@ u32 builtinContentHash(int preset) {
     hash = playlistHashWord(
         hash, (SUSAMUNE_STAGE_PLAYLIST_ACTION_SCHEMA << 24) |
                   ((u32)preset << 16) | count);
-    hash = playlistHashWord(hash, 0);
+    // Fast Any% now includes the beach/bottle approaches in its timed route.
+    hash = playlistHashWord(hash, preset == 0 ? 1 : 0);
     for (int i = 0; i < StageLoader::QUEUE_CAPACITY; i++) {
         hash = (hash ^ (i < count ? entries[i] : 0)) * 16777619u;
         hash = (hash ^ (builtinActionAt(preset, i) ? 1u : 0u)) *
@@ -1358,6 +1359,11 @@ bool fastTextSuppressed() {
            expectedStartEntry() ==
                SUSAMUNE_STAGE_PLAYLIST_ACTION_PIANTA_5 &&
            actionAt(sRuntime.activeActions, sRuntime.activeIndex);
+}
+
+bool fastAnyStart(int entry) {
+    return sRuntime.mode == MODE_LOADER &&
+           sRuntime.activePlaylistId == 0 && expectedStartEntry() == entry;
 }
 
 bool activeRouteMatches(int startEntry, int resultEntry) {

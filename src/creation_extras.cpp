@@ -10,6 +10,7 @@
 #include "SMS/System/Application.hxx"
 #include "susamune/glyphs.hxx"
 #include "susamune/menu.hxx"
+#include "susamune/japanese_ui.hxx"
 #include "susamune/packed_text.hxx"
 #include "susamune/rng_control.hxx"
 #include "susamune/settings.hxx"
@@ -131,6 +132,13 @@ static_assert(packedEntries(kNativeTimerNames, sizeof(kNativeTimerNames)) == 15,
 const char kWallkickNames[] =
     "1st\0" "2nd\0" "3rd\0" "4th\0" "5th\0" "6th\0" "Late";
 const char kRolloutNames[] = "1f\0" "2f\0" "3f\0" "4f\0" "5f";
+const char kGbTimingNames[] = "Early\0On time\0Late\0Check jump";
+const char kButtslideNames[] = "Ready\0Waiting";
+const u8 kPracticeColors[] = {4, 7, 2};
+
+const char *practiceColorNames(unsigned display) {
+    return display == 0 ? kGbTimingNames : display == 1 ? kWallkickNames : kButtslideNames;
+}
 
 inline int clampi(int value, int lo, int hi) {
     if (value < lo) return lo;
@@ -223,6 +231,31 @@ static_assert(sizeof(CreationExtras) <= SUSAMUNE_CREATION_RUNTIME_SIZE,
 
 const char *wallkickDisplayLabel(int index) {
     return PackedText::at(kWallkickNames, index);
+}
+
+const char *practiceDisplayName(unsigned display) {
+    return display == 0 ? Settings::name(SETTING_GB_SKIP_DISPLAY) :
+           display == 1 ? Settings::name(SETTING_JUMP_DISPLAY) : "Buttslide";
+}
+
+void formatPracticeDisplay(char *out, unsigned capacity, unsigned display,
+                           unsigned color, unsigned frames, unsigned qf, float y, float v) {
+#if defined(SUSAMUNE_VERSION_JP)
+#define practiceFormat JapaneseUi::format
+#else
+#define practiceFormat snprintf
+#endif
+    if (display == SUSAMUNE_PRACTICE_DISPLAY_GB) {
+        practiceFormat(out, capacity, "%s %u%sf Y%.0f V%.1f",
+            JapaneseUi::text(PackedText::at(kGbTimingNames, color)),
+            frames, frames == 255 ? "+" : "", y, v);
+    } else {
+        const char frame[] = {static_cast<char>('0' + frames), 'f', 0};
+        const bool jump = display == SUSAMUNE_PRACTICE_DISPLAY_JUMP;
+        const char *label = jump ? color == 6 ? "Late" : frame : PackedText::at(kButtslideNames, color);
+        practiceFormat(out, capacity, jump ? "%s qf%u" : "%s", JapaneseUi::text(label), qf);
+    }
+#undef practiceFormat
 }
 
 void drawCreationKeyboard(Menu *menu, const char *title, const char *text,
@@ -349,6 +382,15 @@ CreationStyle CreationExtras::defaultWallkickStyle() {
     };
 }
 
+const CreationStyle &CreationExtras::defaultPracticeStyle(unsigned display) {
+    static const CreationStyle styles[] = {
+        {300, 106, 90, 255, 0, 0, 0, 185, 100, 5},
+        {300, 132, 90, 255, 0, 0, 0, 185, 100, 5},
+        {300, 156, 70, 255, 0, 0, 0, 128, 100, 2},
+    };
+    return styles[display];
+}
+
 void CreationExtras::resetDefaults() {
     Creation::fillWhite(mColors, SUSAMUNE_CREATION_COLOR_COUNT);
     Creation::fillWhite(mDefaultColors, SUSAMUNE_CREATION_COLOR_COUNT);
@@ -373,6 +415,11 @@ void CreationExtras::resetDefaults() {
     Creation::fillWhite(mRolloutRgb, SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT);
     mDustStyle = defaultWallkickStyle();
     Creation::fillWhite(mDustRgb, SUSAMUNE_DUST_STYLE_COLOR_COUNT);
+    memset(mPracticeDisplays, 0, sizeof(mPracticeDisplays));
+    for (unsigned i = 0; i < SUSAMUNE_PRACTICE_DISPLAY_COUNT; ++i) {
+        storeStyle(&mPracticeDisplays[i].x, defaultPracticeStyle(i));
+        Creation::fillWhite(mPracticeDisplays[i].rgb, SUSAMUNE_PRACTICE_DISPLAY_COLOR_COUNT);
+    }
     mAchievementBannerStyle = defaultAchievementBannerStyle();
     mToastStyle = defaultToastStyle();
     mPbBannerStyle = defaultPbBannerStyle();
@@ -602,6 +649,35 @@ void CreationExtras::stageMovementInto(
                          SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT);
     storeMovementOverlay(&dst->dust, mDustStyle, mDustRgb,
                          SUSAMUNE_DUST_STYLE_COLOR_COUNT);
+}
+
+void CreationExtras::adoptPracticeDisplays(
+    const volatile SusamunePracticeDisplayStyleCfg *src) {
+    if (!src || src->magic != SUSAMUNE_PRACTICE_DISPLAY_STYLE_MAGIC ||
+        src->version != SUSAMUNE_PRACTICE_DISPLAY_STYLE_VERSION ||
+        src->count != SUSAMUNE_PRACTICE_DISPLAY_COUNT) return;
+    memcpy(mPracticeDisplays, (const void *)src->entries, sizeof(mPracticeDisplays));
+    static const SusamunePracticeDisplayStyle inherited = {
+        300, 106, 90, 255, 0, 0, 0, 185, 100, 5,
+        {{255, 255, 255}, {255, 255, 255}, {255, 255, 255}, {255, 255, 255},
+         {255, 255, 255}, {255, 255, 255}, {255, 255, 255}}, {0, 0, 0},
+    };
+    for (unsigned i = 0; i < SUSAMUNE_PRACTICE_DISPLAY_COUNT; ++i) {
+        clampStyle(*reinterpret_cast<CreationStyle *>(&mPracticeDisplays[i].x));
+        memset(mPracticeDisplays[i].reserved, 0, sizeof(mPracticeDisplays[i].reserved));
+        // Separate only untouched defaults inherited from the old shared display.
+        if (memcmp(&mPracticeDisplays[i], &inherited, sizeof(inherited)) == 0)
+            storeStyle(&mPracticeDisplays[i].x, defaultPracticeStyle(i));
+    }
+}
+
+void CreationExtras::stagePracticeDisplaysInto(
+    volatile SusamunePracticeDisplayStyleCfg *dst) const {
+    memset((void *)dst, 0, sizeof(*dst));
+    dst->magic = SUSAMUNE_PRACTICE_DISPLAY_STYLE_MAGIC;
+    dst->version = SUSAMUNE_PRACTICE_DISPLAY_STYLE_VERSION;
+    dst->count = SUSAMUNE_PRACTICE_DISPLAY_COUNT;
+    memcpy((void *)dst->entries, mPracticeDisplays, sizeof(mPracticeDisplays));
 }
 
 void CreationExtras::adoptNativeTimer(
@@ -1004,7 +1080,7 @@ void CreationExtras::beginNativeTimerEditor() {
     mEditCount = 15;
     mEditMode = EDIT_NATIVE_TIMER;
     mEditTitle = "Sunshine timer";
-    mEditor.begin(&mNativeTimerStyle, mWordBackup, mColorBackup, 15, 15,
+    mEditor.begin(&mNativeTimerStyle, mWordBackup, mWordBackup + 30, 15, 15,
                   kNativeTimerNames, CreationEditor::CAP_POSITION |
                   CreationEditor::CAP_SCALE | CreationEditor::CAP_TEXT_ALPHA |
                   CreationEditor::CAP_BRIGHTNESS | CreationEditor::CAP_TEXT_COLOR |
@@ -1030,115 +1106,64 @@ void CreationExtras::restoreHudDefaults() {
         mHudPictures[HUD_PANE_COUNT - 1]->mIsVisible = true;
 }
 
-void CreationExtras::beginRecentIlEditor() {
-    if (editing()) return;
+void CreationExtras::beginOverlayEditor(EditMode mode, unsigned display) {
+    if (editing() || display >= SUSAMUNE_PRACTICE_DISPLAY_COUNT) return;
+    struct Target { u16 style, rgb; u8 colors; };
+#define OVERLAY_TARGET(style, rgb, count) {__builtin_offsetof(CreationExtras, style), __builtin_offsetof(CreationExtras, rgb), count}
+    static const Target targets[] = {
+        OVERLAY_TARGET(mRecentIlStyle, mRecentIlRgb, 1),
+        OVERLAY_TARGET(mSavestateFeedbackStyle, mSavestateFeedbackRgb, 1),
+        OVERLAY_TARGET(mWallkickStyle, mWallkickRgb, SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT),
+        OVERLAY_TARGET(mRolloutStyle, mRolloutRgb, SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT),
+        OVERLAY_TARGET(mDustStyle, mDustRgb, SUSAMUNE_DUST_STYLE_COLOR_COUNT),
+        OVERLAY_TARGET(mAchievementBannerStyle, mRecentIlRgb, 1),
+        OVERLAY_TARGET(mToastStyle, mRecentIlRgb, 1),
+        OVERLAY_TARGET(mPbBannerStyle, mRecentIlRgb, 1),
+        OVERLAY_TARGET(mStageSessionStyle, mRecentIlRgb, 1),
+    };
+#undef OVERLAY_TARGET
+    static const u8 settings[] = {SETTING_SAVESTATE_FEEDBACK, SETTING_WALLKICK_DISPLAY,
+        SETTING_ROLLOUT_DISPLAY, SETTING_DUST_DISPLAY};
+    static const char titles[] = "Achievement popup\0System notifications\0IL PB popup\0Stage session counter";
+    CreationStyle *style;
+    u8 (*rgb)[3];
+    const char *names = nullptr;
+    if (mode == EDIT_PRACTICE_DISPLAY) {
+        SusamunePracticeDisplayStyle &cfg = mPracticeDisplays[display];
+        style = reinterpret_cast<CreationStyle *>(&cfg.x);
+        rgb = cfg.rgb;
+        mEditCount = kPracticeColors[display];
+        mEditTitle = practiceDisplayName(display);
+        names = practiceColorNames(display);
+    } else {
+        const Target &target = targets[mode - EDIT_RECENT_ILS];
+        style = reinterpret_cast<CreationStyle *>(reinterpret_cast<u8 *>(this) + target.style);
+        rgb = reinterpret_cast<u8 (*)[3]>(reinterpret_cast<u8 *>(this) + target.rgb);
+        mEditCount = target.colors;
+        mEditTitle = mode == EDIT_RECENT_ILS ? "Recent IL display" :
+            mode <= EDIT_DUST ? Settings::name((SettingId)settings[mode - EDIT_SAVESTATE_FEEDBACK]) :
+            PackedText::at(titles, mode - EDIT_ACHIEVEMENT_BANNER);
+        if (mode >= EDIT_WALLKICK && mode <= EDIT_DUST)
+            names = mode == EDIT_ROLLOUT ? kRolloutNames : kWallkickNames;
+    }
     mDirtyBeforeEdit = mDirty;
-    mEditMode = EDIT_RECENT_ILS;
-    mEditFirst = 0;
-    mEditCount = 1;
-    mEditTitle = "Recent IL display";
-    mEditor.begin(&mRecentIlStyle, mRecentIlRgb, mRecentIlBackup, 1, 0,
-                  nullptr, CreationEditor::CAP_ALL);
+    mEditMode = mode;
+    mEditFirst = display;
+    const bool positionOnly = mode >= EDIT_ACHIEVEMENT_BANNER && mode <= EDIT_STAGE_SESSION;
+    mEditor.begin(style, rgb, mColorBackup, mEditCount, names ? mEditCount : 0, names,
+        positionOnly ? CreationEditor::CAP_POSITION | CreationEditor::CAP_SCALE : CreationEditor::CAP_ALL);
 }
 
-void CreationExtras::beginSavestateFeedbackEditor() {
-    if (editing()) return;
-    mDirtyBeforeEdit = mDirty;
-    mEditMode = EDIT_SAVESTATE_FEEDBACK;
-    mEditFirst = 0;
-    mEditCount = 1;
-    mEditTitle = Settings::name(SETTING_SAVESTATE_FEEDBACK);
-    mEditor.begin(&mSavestateFeedbackStyle, mSavestateFeedbackRgb,
-                  mSavestateFeedbackBackup, 1, 0, nullptr,
-                  CreationEditor::CAP_ALL);
-}
-
-void CreationExtras::beginWallkickEditor() {
-    if (editing()) return;
-    mDirtyBeforeEdit = mDirty;
-    mEditMode = EDIT_WALLKICK;
-    mEditFirst = 0;
-    mEditCount = SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT;
-    mEditTitle = Settings::name(SETTING_WALLKICK_DISPLAY);
-    mEditor.begin(&mWallkickStyle, mWallkickRgb, mWallkickBackup,
-                  SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT,
-                  SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT, kWallkickNames,
-                  CreationEditor::CAP_ALL);
-}
-
-void CreationExtras::beginRolloutEditor() {
-    if (editing()) return;
-    mDirtyBeforeEdit = mDirty;
-    mEditMode = EDIT_ROLLOUT;
-    mEditFirst = 0;
-    mEditCount = SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT;
-    mEditTitle = Settings::name(SETTING_ROLLOUT_DISPLAY);
-    mEditor.begin(&mRolloutStyle, mRolloutRgb, mRolloutBackup,
-                  SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT,
-                  SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT, kRolloutNames,
-                  CreationEditor::CAP_ALL);
-}
-
-void CreationExtras::beginDustEditor() {
-    if (editing()) return;
-    mDirtyBeforeEdit = mDirty;
-    mEditMode = EDIT_DUST;
-    mEditFirst = 0;
-    mEditCount = SUSAMUNE_DUST_STYLE_COLOR_COUNT;
-    mEditTitle = Settings::name(SETTING_DUST_DISPLAY);
-    mEditor.begin(&mDustStyle, mDustRgb, mDustBackup,
-                  SUSAMUNE_DUST_STYLE_COLOR_COUNT,
-                  SUSAMUNE_DUST_STYLE_COLOR_COUNT, kWallkickNames,
-                  CreationEditor::CAP_ALL);
-}
-
-void CreationExtras::beginAchievementBannerEditor() {
-    if (editing()) return;
-    mDirtyBeforeEdit = mDirty;
-    mEditMode = EDIT_ACHIEVEMENT_BANNER;
-    mEditFirst = 0;
-    mEditCount = 1;
-    mEditTitle = "Achievement popup";
-    mEditor.begin(&mAchievementBannerStyle, mRecentIlRgb, mRecentIlBackup,
-                  1, 0, nullptr,
-                  CreationEditor::CAP_POSITION | CreationEditor::CAP_SCALE);
-}
-
-void CreationExtras::beginToastEditor() {
-    if (editing()) return;
-    mDirtyBeforeEdit = mDirty;
-    mEditMode = EDIT_TOAST;
-    mEditFirst = 0;
-    mEditCount = 1;
-    mEditTitle = "System notifications";
-    mEditor.begin(&mToastStyle, mRecentIlRgb, mRecentIlBackup,
-                  1, 0, nullptr,
-                  CreationEditor::CAP_POSITION | CreationEditor::CAP_SCALE);
-}
-
-void CreationExtras::beginPbBannerEditor() {
-    if (editing()) return;
-    mDirtyBeforeEdit = mDirty;
-    mEditMode = EDIT_PB_BANNER;
-    mEditFirst = 0;
-    mEditCount = 1;
-    mEditTitle = "IL PB popup";
-    mEditor.begin(&mPbBannerStyle, mRecentIlRgb, mRecentIlBackup,
-                  1, 0, nullptr,
-                  CreationEditor::CAP_POSITION | CreationEditor::CAP_SCALE);
-}
-
-void CreationExtras::beginStageSessionEditor() {
-    if (editing()) return;
-    mDirtyBeforeEdit = mDirty;
-    mEditMode = EDIT_STAGE_SESSION;
-    mEditFirst = 0;
-    mEditCount = 1;
-    mEditTitle = "Stage session counter";
-    mEditor.begin(&mStageSessionStyle, mRecentIlRgb, mRecentIlBackup,
-                  1, 0, nullptr,
-                  CreationEditor::CAP_POSITION | CreationEditor::CAP_SCALE);
-}
+void CreationExtras::beginRecentIlEditor() { beginOverlayEditor(EDIT_RECENT_ILS); }
+void CreationExtras::beginSavestateFeedbackEditor() { beginOverlayEditor(EDIT_SAVESTATE_FEEDBACK); }
+void CreationExtras::beginWallkickEditor() { beginOverlayEditor(EDIT_WALLKICK); }
+void CreationExtras::beginRolloutEditor() { beginOverlayEditor(EDIT_ROLLOUT); }
+void CreationExtras::beginDustEditor() { beginOverlayEditor(EDIT_DUST); }
+void CreationExtras::beginPracticeDisplayEditor(unsigned display) { beginOverlayEditor(EDIT_PRACTICE_DISPLAY, display); }
+void CreationExtras::beginAchievementBannerEditor() { beginOverlayEditor(EDIT_ACHIEVEMENT_BANNER); }
+void CreationExtras::beginToastEditor() { beginOverlayEditor(EDIT_TOAST); }
+void CreationExtras::beginPbBannerEditor() { beginOverlayEditor(EDIT_PB_BANNER); }
+void CreationExtras::beginStageSessionEditor() { beginOverlayEditor(EDIT_STAGE_SESSION); }
 
 void CreationExtras::drawSavestateFeedback(Menu *menu,
                                            const char *message) const {
@@ -1146,85 +1171,74 @@ void CreationExtras::drawSavestateFeedback(Menu *menu,
                           mSavestateFeedbackRgb, 1, message);
 }
 
+static __attribute__((noinline)) void drawMovementFeedback(
+    Menu *menu, const char *message, const CreationStyle &style,
+    const u8 (*rgb)[3], int color, unsigned colors) {
+    Creation::drawTextBox(menu, style, rgb + clampi(color, 0, colors - 1), 1, message);
+}
+
 void CreationExtras::drawWallkickDisplay(Menu *menu, const char *message,
                                          int color) const {
-    if (!menu || !message) return;
-    color = clampi(color, 0, SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT - 1);
-    Creation::drawTextBox(menu, mWallkickStyle, mWallkickRgb + color, 1,
-                          message);
+    drawMovementFeedback(menu, message, mWallkickStyle, mWallkickRgb, color,
+                         SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT);
 }
 
 void CreationExtras::drawRolloutDisplay(Menu *menu, const char *message,
                                         int color) const {
-    if (!menu || !message) return;
-    color = clampi(color, 0, SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT - 1);
-    Creation::drawTextBox(menu, mRolloutStyle, mRolloutRgb + color, 1,
-                          message);
+    drawMovementFeedback(menu, message, mRolloutStyle, mRolloutRgb, color,
+                         SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT);
 }
 
 void CreationExtras::drawDustDisplay(Menu *menu, const char *message,
                                      int color) const {
-    if (!menu || !message) return;
-    color = clampi(color, 0, SUSAMUNE_DUST_STYLE_COLOR_COUNT - 1);
-    Creation::drawTextBox(menu, mDustStyle, mDustRgb + color, 1, message);
+    drawMovementFeedback(menu, message, mDustStyle, mDustRgb, color,
+                         SUSAMUNE_DUST_STYLE_COLOR_COUNT);
+}
+
+void CreationExtras::drawPracticeDisplay(Menu *menu, const char *message,
+                                        unsigned display, int color) const {
+    if (display >= SUSAMUNE_PRACTICE_DISPLAY_COUNT) return;
+    const SusamunePracticeDisplayStyle &cfg = mPracticeDisplays[display];
+    drawMovementFeedback(menu, message, *reinterpret_cast<const CreationStyle *>(&cfg.x),
+                         cfg.rgb, color, kPracticeColors[display]);
+}
+
+static void drawNotification(Menu *menu, const char *message,
+                             const CreationStyle &style, unsigned kind) {
+    if (!menu || !message || !message[0]) return;
+    const bool pb = kind == 1, session = kind == 2;
+    const int scale = style.scale;
+    const int baseSize = pb ? 22 : session ? 18 : 16;
+    int size = clampi((baseSize * scale + 50) / 100, baseSize / 2, baseSize * 2);
+    const int padX = ((pb ? 14 : session ? 9 : 10) * scale + 50) / 100;
+    const int padY = ((pb ? 10 : session ? 5 : 6) * scale + 50) / 100;
+    if (!session) {
+        while (size > baseSize / 2 && Menu::textWidth(message, size) + padX * 2 > 640)
+            --size;
+    }
+    const int w = Menu::textWidth(message, size) + padX * 2;
+    const int h = pb ? (42 * scale + 50) / 100 : size + padY * 2;
+    const int x = clampi((int)style.x - (pb ? w / 2 : 0), 0, 640 - w);
+    const int y = clampi(style.y, 0, 480 - h);
+    const int bar = clampi(((pb ? 4 : 3) * scale + 50) / 100, 1, pb ? 8 : 6);
+    menu->fillBox(x, y, w, h, session ? Color(style.bgR, style.bgG, style.bgB, style.bgA) :
+                  pb ? Color(90, 58, 4, 230) : Color(0, 0, 0, 200));
+    menu->fillBox(x, y, bar, h, pb ? Color(255, 196, 40, 255) :
+                  session ? Color(80, 180, 255, 255) : Color(90, 170, 255, 255));
+    menu->drawText(message, x + padX, y + padY, size, size,
+                   pb ? Color(255, 239, 178, 255) : Color(255, 255, 255, session ? style.textA : 255));
 }
 
 void CreationExtras::drawToast(Menu *menu, const char *message) const {
-    if (!menu || !message || !message[0]) return;
-    const int scale = mToastStyle.scale;
-    int size = clampi((16 * scale + 50) / 100, 8, 32);
-    const int padX = (10 * scale + 50) / 100;
-    const int padY = (6 * scale + 50) / 100;
-    while (size > 8 && Menu::textWidth(message, size) + padX * 2 > 640)
-        size--;
-    const int w = Menu::textWidth(message, size) + padX * 2;
-    const int h = size + padY * 2;
-    const int x = clampi(mToastStyle.x, 0, 640 - w);
-    const int y = clampi(mToastStyle.y, 0, 480 - h);
-    menu->fillBox(x, y, w, h, Color(0, 0, 0, 200));
-    menu->fillBox(x, y, clampi((3 * scale + 50) / 100, 1, 6), h,
-                  Color(90, 170, 255, 255));
-    menu->drawText(message, x + padX, y + padY, size, size,
-                   Color(255, 255, 255, 255));
+    drawNotification(menu, message, mToastStyle, 0);
 }
 
 void CreationExtras::drawPbBanner(Menu *menu, const char *message) const {
-    if (!menu || !message || !message[0]) return;
-    const int scale = mPbBannerStyle.scale;
-    int size = clampi((22 * scale + 50) / 100, 11, 44);
-    const int padX = (14 * scale + 50) / 100;
-    const int textY = (10 * scale + 50) / 100;
-    while (size > 11 && Menu::textWidth(message, size) + padX * 2 > 640)
-        size--;
-    const int w = Menu::textWidth(message, size) + padX * 2;
-    const int h = (42 * scale + 50) / 100;
-    const int x = clampi((int)mPbBannerStyle.x - w / 2, 0, 640 - w);
-    const int y = clampi(mPbBannerStyle.y, 0, 480 - h);
-    menu->fillBox(x, y, w, h, Color(90, 58, 4, 230));
-    menu->fillBox(x, y, clampi((4 * scale + 50) / 100, 1, 8), h,
-                  Color(255, 196, 40, 255));
-    menu->drawText(message, x + padX, y + textY, size, size,
-                   Color(255, 239, 178, 255));
+    drawNotification(menu, message, mPbBannerStyle, 1);
 }
 
-void CreationExtras::drawStageSessionCounter(Menu *menu,
-                                              const char *message) const {
-    if (!menu || !message || !message[0]) return;
-    const int scale = mStageSessionStyle.scale;
-    const int size = clampi((18 * scale + 50) / 100, 9, 36);
-    const int padX = (9 * scale + 50) / 100;
-    const int padY = (5 * scale + 50) / 100;
-    const int w = Menu::textWidth(message, size) + padX * 2;
-    const int h = size + padY * 2;
-    const int x = clampi(mStageSessionStyle.x, 0, 640 - w);
-    const int y = clampi(mStageSessionStyle.y, 0, 480 - h);
-    const int bar = clampi((3 * scale + 50) / 100, 1, 6);
-    menu->fillBox(x, y, w, h,
-                  Color(mStageSessionStyle.bgR, mStageSessionStyle.bgG,
-                        mStageSessionStyle.bgB, mStageSessionStyle.bgA));
-    menu->fillBox(x, y, bar, h, Color(80, 180, 255, 255));
-    menu->drawText(message, x + padX, y + padY, size, size,
-                   Color(255, 255, 255, mStageSessionStyle.textA));
+void CreationExtras::drawStageSessionCounter(Menu *menu, const char *message) const {
+    drawNotification(menu, message, mStageSessionStyle, 2);
 }
 
 void CreationExtras::toggleTimerLabel() {
@@ -1332,15 +1346,8 @@ void CreationExtras::updateEditor(TMarioGamePad *pad) {
         return;
     }
     static const u8 kOverlayDefaults[1][3] = {{255, 255, 255}};
-    const bool overlayStyle = mEditMode == EDIT_RECENT_ILS ||
-                              mEditMode == EDIT_SAVESTATE_FEEDBACK ||
-                              mEditMode == EDIT_WALLKICK ||
-                              mEditMode == EDIT_ROLLOUT ||
-                              mEditMode == EDIT_DUST ||
-                              mEditMode == EDIT_ACHIEVEMENT_BANNER ||
-                              mEditMode == EDIT_TOAST ||
-                              mEditMode == EDIT_PB_BANNER ||
-                              mEditMode == EDIT_STAGE_SESSION;
+    const bool overlayStyle = (mEditMode >= EDIT_RECENT_ILS && mEditMode <= EDIT_STAGE_SESSION) ||
+                              mEditMode == EDIT_PRACTICE_DISPLAY;
     const u8 (*defaults)[3] = mEditMode == EDIT_WORD_STYLE
                                   ? mDefaultColors
         : overlayStyle ? kOverlayDefaults : mDefaultColors + mEditFirst;
@@ -1349,9 +1356,8 @@ void CreationExtras::updateEditor(TMarioGamePad *pad) {
         : mEditMode == EDIT_RECENT_ILS ? defaultRecentIlStyle()
         : mEditMode == EDIT_SAVESTATE_FEEDBACK
               ? defaultSavestateFeedbackStyle()
-        : mEditMode == EDIT_WALLKICK ? defaultWallkickStyle()
-        : mEditMode == EDIT_ROLLOUT ? defaultWallkickStyle()
-        : mEditMode == EDIT_DUST ? defaultWallkickStyle()
+        : (mEditMode >= EDIT_WALLKICK && mEditMode <= EDIT_DUST) ? defaultWallkickStyle()
+        : mEditMode == EDIT_PRACTICE_DISPLAY ? defaultPracticeStyle(mEditFirst)
         : mEditMode == EDIT_ACHIEVEMENT_BANNER
               ? defaultAchievementBannerStyle()
         : mEditMode == EDIT_TOAST ? defaultToastStyle()
@@ -1477,27 +1483,23 @@ void CreationExtras::drawEditor(Menu *menu) const {
         mEditor.draw(menu, mEditTitle, "Stage layout changed - save again");
         return;
     }
-    if (mEditMode == EDIT_WALLKICK) {
+    if ((mEditMode >= EDIT_WALLKICK && mEditMode <= EDIT_DUST) ||
+        mEditMode == EDIT_PRACTICE_DISPLAY) {
         const u16 target = mEditor.target();
         const int color = target ? target - 1 : 0;
-        const char *preview = wallkickDisplayLabel(color);
-        drawWallkickDisplay(menu, preview, color);
-        mEditor.draw(menu, mEditTitle, preview);
-        return;
-    }
-    if (mEditMode == EDIT_ROLLOUT) {
-        const u16 target = mEditor.target();
-        const int color = target ? target - 1 : 0;
-        const char *preview = PackedText::at(kRolloutNames, color);
-        drawRolloutDisplay(menu, preview, color);
-        mEditor.draw(menu, mEditTitle, preview);
-        return;
-    }
-    if (mEditMode == EDIT_DUST) {
-        const u16 target = mEditor.target();
-        const int color = target ? target - 1 : 0;
-        const char *preview = wallkickDisplayLabel(color);
-        drawDustDisplay(menu, preview, color);
+        char formatted[80];
+        const char *preview;
+        if (mEditMode == EDIT_PRACTICE_DISPLAY) {
+            const unsigned frames = mEditFirst == SUSAMUNE_PRACTICE_DISPLAY_GB ?
+                (color == 0 ? 8 : color == 2 ? 10 : 9) : color + 1;
+            formatPracticeDisplay(formatted, sizeof(formatted), mEditFirst, color, frames, 0,
+                                  color == 3 ? 400.0f : 404.0f, color == 3 ? 5.0f : 6.0f);
+            preview = formatted;
+        } else preview = PackedText::at(mEditMode == EDIT_ROLLOUT ? kRolloutNames : kWallkickNames, color);
+        if (mEditMode == EDIT_PRACTICE_DISPLAY) drawPracticeDisplay(menu, preview, mEditFirst, color);
+        else if (mEditMode == EDIT_WALLKICK) drawWallkickDisplay(menu, preview, color);
+        else if (mEditMode == EDIT_ROLLOUT) drawRolloutDisplay(menu, preview, color);
+        else drawDustDisplay(menu, preview, color);
         mEditor.draw(menu, mEditTitle, preview);
         return;
     }

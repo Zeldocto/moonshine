@@ -38,6 +38,7 @@ typedef unsigned UINT;typedef unsigned FSIZE_t;
 extern "C" void *memcpy(void*d,const void*s,__SIZE_TYPE__ n){u8*a=(u8*)d;const u8*b=(const u8*)s;while(n--)*a++=*b++;return d;}
 extern "C" void *memset(void*d,int v,__SIZE_TYPE__ n){u8*a=(u8*)d;while(n--)*a++=(u8)v;return d;}
 int strcmp(const char*a,const char*b){while(*a&&*a==*b){a++;b++;}return (u8)*a-(u8)*b;}
+int strncmp(const char*a,const char*b,unsigned n){while(n&&*a&&*a==*b){a++;b++;n--;}return n?(u8)*a-(u8)*b:0;}
 unsigned strlen(const char*s){unsigned n=0;while(s[n])n++;return n;}
 char*strchr(char*s,int c){while(*s&&*s!=c)s++;return *s==c?s:0;}
 char*number(char*out,unsigned v){char d[10];unsigned n=0;do{d[n++]='0'+v%10;v/=10;}while(v);while(n)*out++=d[--n];return out;}
@@ -52,6 +53,9 @@ static SusamuneILEpisodesCfg episodes;
 #undef SUSAMUNE_IL_EPISODES_PHYS_PTR
 #define SUSAMUNE_IL_EPISODES_PHYS_PTR (&episodes)
 static SusamuneCfg cfg;
+static SusamunePracticeDisplayStyleCfg practiceStyles;
+#undef SUSAMUNE_PRACTICE_DISPLAY_STYLE_PHYS_PTR
+#define SUSAMUNE_PRACTICE_DISPLAY_STYLE_PHYS_PTR (&practiceStyles)
 static SusamuneMarioColorsCfg mario;static SusamuneFluddColorsCfg fludd;
 SusamuneMarioColorsCfg*MarioColorsBlock(){return &mario;}SusamuneFluddColorsCfg*FluddColorsBlock(){return &fludd;}
 static bool SawSettingsSection;
@@ -85,16 +89,18 @@ unsigned DeviceForName(const char*){return 0;}void RemountDevice(unsigned){}
         code += kernel[kernel.index("#define SUSAMUNE_SETTING_KEY"):kernel.index("// Same, for the running disc") ]
         code += function(kernel, "FindSettingKey")
         for name in re.findall(r"\b(Apply\w+)\(", function(kernel, "ParseIni")):
-            if name != "ApplyILEpisodeKey":
+            if name not in ("ApplyILEpisodeKey", "ApplyPracticeDisplayStyleKey", "ApplyWallkickStyleKey"):
                 code += f"template<class... T>void {name}(T...){{}}\n"
         code += kernel[kernel.index("enum IniSection {"):kernel.index("static enum IniSection ClassifySection")]
         code += kernel[kernel.index("#define IL_EPISODE_KEY"):kernel.index("static void ApplyILEpisodeKey")]
         keys = kernel[kernel.index("static const char *const CreationColorKeys"):]
         code += keys[:keys.index("};") + 2]
-        for name in ("BuildSectionName", "IsSpace", "Trim", "ParseU8", "ClassifySection",
-                     "ApplyILEpisodeKey", "ParseIni", "Emit", "EmitStr", "EmitILEpisodes"):
+        code += kernel[kernel.index("static const char *const PracticeDisplayKeys"):kernel.index("static u8 ApplyPracticeDisplayStyleKey")]
+        for name in ("BuildSectionName", "IsSpace", "Trim", "ParseU8", "ParseU16", "ParseQftU8", "ParseQftRgb", "ClassifySection",
+                     "ApplyILEpisodeKey", "ApplyWallkickStyleKey", "ApplyMovementOverlayStyleKey", "ApplyPracticeDisplayStyleKey", "InheritPracticeDisplayStyles",
+                     "ParseIni", "Emit", "EmitStr", "EmitILEpisodes", "EmitMovementOverlayStyle", "EmitPracticeDisplayStyles"):
             code += function(kernel, name)
-        for name in ("EmitMovementOverlayStyle", "EmitNativeTimerStyle", "EmitMarioColors", "EmitFluddColors"):
+        for name in ("EmitNativeTimerStyle", "EmitMarioColors", "EmitFluddColors"):
             code += f"template<class... T>void {name}(T...){{}}\n"
         code += function(kernel, "EmitSettingsSection")
         for name in ("Binds", "InputDisplay", "MetadataDisplay", "QftDisplay"):
@@ -114,6 +120,8 @@ API void selectRegion(const char*region){
  BuildSectionName(QftDisplaySection,SUSAMUNE_INI_SECTION_QFT_DISPLAY,region);
  BuildSectionName(CreationSection,SUSAMUNE_INI_SECTION_CREATION,region);
  resetEpisodeChoices();stageEpisodes(&episodes);memset(&cfg,0,sizeof(cfg));
+ SusamunePracticeDisplayStyleInit(&practiceStyles);
+ cfg.wallkickStyle.magic=SUSAMUNE_WALLKICK_STYLE_MAGIC;cfg.wallkickStyle.version=SUSAMUNE_WALLKICK_STYLE_VERSION;
  cfg.count=SETTING_KEY_COUNT;for(unsigned i=0;i<SUSAMUNE_CFG_TOTAL_SETTINGS;i++)SusamuneCfgSetSetting(&cfg,i,SUSAMUNE_CFG_UNSET);
  attrPoison=0xa5;realAttr=0x20;statError=closeError=0;tempOpens=sourceCloses=commits=0;
 }
@@ -121,6 +129,8 @@ API void parse(const char*text){static char input[65536];memcpy(input,text,strle
 API unsigned getSetting(unsigned index){return SusamuneCfgGetSetting(&cfg,index);}
 API void settingCount(unsigned count){cfg.count=count;}
 API void getEpisodes(SusamuneILEpisodesCfg*out){*out=episodes;}
+API const void*styles(){return &practiceStyles;}
+API const void*unrelated(){return &cfg.movementStyle;}
 API void setEpisodes(const SusamuneILEpisodesCfg*in){episodes=*in;}
 API void adopt(const SusamuneILEpisodesCfg*in,SusamuneILEpisodesCfg*out){adoptEpisodes(in);stageEpisodes(out);}
 API const char*rewrite(const char*input){originalLength=strlen(input);memcpy(original,input,originalLength+1);return WriteIniFile(&cfg)?0:original;}
@@ -146,6 +156,45 @@ API unsigned operations(){return tempOpens|(sourceCloses<<8)|(commits<<16);}
         cls.lib.attributes.argtypes = [C.c_uint, C.c_uint, C.c_int, C.c_int]
         cls.lib.attemptRewrite.argtypes = [C.c_uint, C.c_char_p]
         cls.lib.readOriginal.restype = C.c_char_p
+        cls.lib.styles.restype = cls.lib.unrelated.restype = C.c_void_p
+
+    def test_independent_display_styles_roundtrip_and_leave_other_regions_unchanged(self):
+        for region in (b'jp', b'us', b'pal'):
+            self.lib.selectRegion(region)
+            other = b'[creation_other]\r\ngb_timing_x = 619\r\n'
+            source = other + b'[creation_' + region + b']\r\n'
+            for i, prefix in enumerate((b'gb_timing', b'jump_timing', b'buttslide')):
+                fields = {b'x': str(30+i*100).encode(), b'y': str(40+i*100).encode(),
+                          b'scale': b'125', b'text_alpha': b'127', b'background_rgb': b'1,2,3',
+                          b'background_alpha': b'201', b'text_brightness': b'150', b'padding': b'9'}
+                fields.update({f'{c+1}_rgb'.encode(): f'{i*30+c},50,240'.encode() for c in range(7)})
+                source += b''.join(prefix+b'_'+key+b' = '+value+b'\r\n' for key,value in fields.items())
+            neighbors = C.string_at(self.lib.unrelated(), 96)
+            self.lib.parse(source)
+            before = C.string_at(self.lib.styles(), 128)
+            self.assertEqual(C.string_at(self.lib.unrelated(), 96), neighbors)
+            self.assertEqual([int.from_bytes(before[8+i*36:10+i*36], 'little') for i in range(3)], [30,130,230])
+            self.assertEqual([before[20+i*36] for i in range(3)], [0,30,60])
+            output = self.lib.rewrite(source)
+            self.assertIn(other, output)
+            self.lib.selectRegion(region)
+            self.lib.parse(output)
+            self.assertEqual(C.string_at(self.lib.styles(), 128), before)
+
+    def test_old_ini_inherits_wallkick_but_new_display_keys_do_not_cross_targets(self):
+        self.lib.selectRegion(b'jp')
+        source = b'[creation_jp]\r\nwallkick_x = 123\r\nwallkick_y = 234\r\n'
+        source += b''.join(f'wallkick_{i+1}_rgb = {i*10},20,30\r\n'.encode() for i in range(7))
+        self.lib.parse(source)
+        old = C.string_at(self.lib.styles(), 128)
+        self.assertEqual([int.from_bytes(old[8+i*36:10+i*36], 'little') for i in range(3)], [123]*3)
+        self.assertEqual([old[20+i*3] for i in range(4)], [10,0,60,60])
+        self.lib.selectRegion(b'jp')
+        self.lib.parse(source+b'jump_timing_x = 456\r\n')
+        result = C.string_at(self.lib.styles(),128)
+        self.assertEqual(result[8:44], old[8:44])
+        self.assertEqual(result[80:116], old[80:116])
+        self.assertEqual(int.from_bytes(result[44:46], 'little'),456)
 
     def test_both_writers_use_real_attributes_despite_poisoned_file_object(self):
         original = b"[creation_jp]\r\nkeep = 77\r\n[creation_us]\r\nkeep = 88\r\n"

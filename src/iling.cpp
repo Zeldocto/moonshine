@@ -994,12 +994,24 @@ bool sameCourseEpisode(const LevelWarp::Dest &a,
 }
 
 LevelWarp::Dest selectedStart(int entry) {
-    const LevelWarp::Dest original = kEntries[entry].start;
+    LevelWarp::Dest original = kEntries[entry].start;
+    if (StageLoader::fastAnyStart(entry)) {
+        const u8 course = parentOrSelf(original.area);
+        if (course == TGameSequence::AREA_PINNABEACH ||
+            entry == kEntryNoki3Inside)
+            original = {course, original.gameInt3, original.gameInt3};
+    }
     const int index = episodeChoiceIndex(entry);
     if (index < 0 || !sEpisodeChoices[index] ||
         sEpisodeChoices[index] == original.gameInt3 + 1) return original;
     const u8 episode = sEpisodeChoices[index] - 1;
     return {parentOrSelf(original.area), episode, episode};
+}
+
+bool sessionStartChanged() {
+    return validEntry(sSelectedEntry) &&
+           StageLoader::fastAnyStart(sSelectedEntry) &&
+           !sameDest(sAttemptStart, kEntries[sSelectedEntry].start);
 }
 
 bool acceptsSkipOrigin(const Entry &item) {
@@ -1119,6 +1131,7 @@ int entryForResult(u8 result) {
         const Entry &selected = kEntries[sSelectedEntry];
         if ((acceptsAnySelectedOrigin(selected) ||
              sSelectedEntry == kEntryGelatoGbs ||
+             sessionStartChanged() ||
              fullRedsBaseShine(sSelectedEntry) >= 0) &&
             entryFinish(selected) == FINISH_SHINE &&
             selected.result == result) {
@@ -1415,11 +1428,11 @@ void beginAttemptScene(int entry) {
     sAwaitingStageSetup = false;
     sNativeIgt = false;
     sAssistReasons = liveGlobalAssistReasons();
-    sRecordsEligible = sAssistReasons == 0;
+    sRecordsEligible = sAssistReasons == 0 && !sessionStartChanged();
     Records::onILAttemptStarted(entry);
     if (!sRecordsEligible) {
-        Records::invalidateAttempt(sAssistReasons);
-        StageLoader::invalidatePlaylistBest();
+        Records::invalidateAttempt(sAssistReasons ? sAssistReasons : Assist::OTHER);
+        if (sAssistReasons) StageLoader::invalidatePlaylistBest();
     }
 }
 
@@ -1503,9 +1516,10 @@ bool recordPB(int entry, s32 qf) {
 }
 
 void recordResult(int entry, s32 qf) {
-    if (sChildRetryContinuation) {
-        // The session owns the retry, but this clock began inside the child.
-        StageLoader::onILResult(entry, qf, false);
+    if (sChildRetryContinuation || sessionStartChanged()) {
+        // These are valid queue finishes, not comparable standalone IL times.
+        StageLoader::onILResult(entry, qf, sAssistReasons == 0 &&
+            StageLoader::mode() == StageLoader::MODE_LOADER);
         return;
     }
     sRecentQf[sRecentNext] = qf;
@@ -2262,7 +2276,8 @@ void update() {
             sAttemptSerial = serial;
             sChildRetryContinuation = sessionChildReset;
             sAssistReasons = liveGlobalAssistReasons();
-            sRecordsEligible = !sessionChildReset && sAssistReasons == 0;
+            sRecordsEligible = !sessionChildReset && !sessionStartChanged() &&
+                               sAssistReasons == 0;
             sNativeIgt = false;
             const int entry = validEntry(sSelectedEntry)
                                   ? sSelectedEntry
@@ -2281,7 +2296,8 @@ void update() {
             if (!sRecordsEligible) {
                 Records::invalidateAttempt(sAssistReasons ? sAssistReasons
                                                           : Assist::OTHER);
-                StageLoader::invalidatePlaylistBest();
+                if (sessionChildReset || sAssistReasons)
+                    StageLoader::invalidatePlaylistBest();
                 SplitStats::invalidateAttempt();
             }
         } else {

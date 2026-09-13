@@ -35,7 +35,7 @@ class CreationMenuRouteTests(unittest.TestCase):
 #include "susamune/settings_list.h"
 typedef unsigned char u8;typedef unsigned short u16;typedef unsigned u32;
 #define ID(name,key) name,
-enum SettingId { SUSAMUNE_SETTING_LIST(ID) };
+enum SettingId { SUSAMUNE_SETTING_LIST(ID) SETTING_BUTTSLIDE_DISPLAY };
 #undef ID
 enum { SUSAMUNE_CREATION_TIMER_BG=1,SUSAMUNE_CREATION_TIMER_LABEL=2 };
 #define SUSAMUNE_GLYPH_SLASH "/"
@@ -66,6 +66,7 @@ struct CreationExtras:Editor {
     void beginWallkickEditor(){hit(4,108);}
     void beginRolloutEditor(){hit(4,109);}
     void beginDustEditor(){hit(4,110);}
+    void beginPracticeDisplayEditor(unsigned display){hit(4,113+display);}
     void beginSavestateFeedbackEditor(){hit(4,111);}
     void beginRecentIlEditor(){hit(4,112);}
 };
@@ -137,14 +138,14 @@ extern "C" __declspec(dllexport) int movementPage(int display,int mode,int same)
 
     def test_page_ranges_include_every_new_row_and_no_headers(self):
         self.assertEqual([self.lib.range(p, 1) - self.lib.range(p, 0) for p in range(7)],
-                         [7, 7, 20, 9, 9, 5, 5])
+                         [7, 7, 20, 9, 9, 8, 5])
 
     def test_health_air_and_shifted_custom_notification_editors(self):
         for page, local, row in ((3, 7, 106), (3, 8, 107), (4, 0, 9),
                                   (4, 8, 17), (6, 0, 19), (6, 4, 23)):
             count, out = self.route(page, local)
             self.assertEqual((count, out[:3]), (1, [4, row, 1]))
-        for local, row in enumerate((108, 109, 110, 111, 112)):
+        for local, row in enumerate((108, 113, 114, 115, 109, 110, 111, 112)):
             self.assertEqual(self.route(5, local)[1][:2], [4, row])
 
     def test_metadata_style_first_mapping_preserves_all_twenty_actions(self):

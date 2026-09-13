@@ -55,6 +55,7 @@ enum ChoiceSet {
     CHOICES_NATIVE_SCALE,
     CHOICES_FREE_CAMERA_SPEED,
     CHOICES_CAMERA_SMOOTHING,
+    CHOICES_JUMP_DISPLAY,
     CHOICES_COUNT,
 };
 
@@ -90,7 +91,8 @@ const char kChoiceLabels[] =
     "All enemies\0Eely teeth only\0Ghost\0Both ghosts\0PB\0SOB\0"
     "0.25x\0" "0.5x\0" "1x\0" "2x\0" "4x\0"
     "0.1 s\0" "0.2 s\0" "0.3 s\0" "0.4 s\0" "0.6 s\0" "0.7 s\0"
-    "0.8 s\0" "0.9 s\0" "1.1 s\0" "1.2 s\0" "1.3 s\0" "1.4 s\0" "1.5 s";
+    "0.8 s\0" "0.9 s\0" "1.1 s\0" "1.2 s\0" "1.3 s\0" "1.4 s\0" "1.5 s\0"
+    "Landing\0Buttslide";
 
 const u8 kChoiceMap[] = {
     0, 1,              // bool
@@ -118,13 +120,14 @@ const u8 kChoiceMap[] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // numeric presentation values
     57, 58, 59, 60, 61,  // free camera speed
     0, 62, 63, 64, 65, 13, 66, 67, 68, 69, 14, 70, 71, 72, 73, 74, // smoothing
+    0, 75, 76, 45, // jump display: Off, Landing, Buttslide, Both
 };
 const u8 kChoiceFirst[CHOICES_COUNT + 1] = {
     0, 2, 5, 9, 12, 15, 21, 24, 27, 31, 34, 36, 39, 42, 44, 50, 52, 57,
-    61, 65, 67, 70, 74, 107, 132, 143, 148, 164
+    61, 65, 67, 70, 74, 107, 132, 143, 148, 164, 168
 };
 
-static_assert(sizeof(kChoiceMap) / sizeof(kChoiceMap[0]) == 164,
+static_assert(sizeof(kChoiceMap) / sizeof(kChoiceMap[0]) == 168,
               "choice map size changed");
 static_assert(SETTING_FREE_CAMERA_SMOOTHING == SETTING_TAS_BANNER + 1 &&
               SETTING_COUNT <= SUSAMUNE_CFG_TOTAL_SETTINGS,
@@ -336,6 +339,8 @@ void Settings::save() {
         DCStoreRange(SUSAMUNE_FLUDD_COLORS_LIVE_PTR, sizeof(SusamuneFluddColorsCfg));
     if (cfg->flags & SUSAMUNE_CFG_FLAG_IL_EPISODES)
         DCStoreRange(SUSAMUNE_IL_EPISODES_LIVE_PTR, sizeof(SusamuneILEpisodesCfg));
+    if (cfg->flags & SUSAMUNE_CFG_FLAG_PRACTICE_DISPLAY_STYLE)
+        DCStoreRange(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR, sizeof(SusamunePracticeDisplayStyleCfg));
 
     mSaveSeq     = cfg->saveSeq + 1;
     cfg->saveSeq = mSaveSeq;
@@ -484,6 +489,13 @@ void Settings::adopt(const volatile SusamuneCfg *cfg) {
         ILing::adoptEpisodes(SUSAMUNE_IL_EPISODES_LIVE_PTR);
     }
 
+    if (cfg->flags & SUSAMUNE_CFG_FLAG_PRACTICE_DISPLAY_STYLE) {
+#if !IS_EMULATOR
+        DCInvalidateRange(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR, sizeof(SusamunePracticeDisplayStyleCfg));
+#endif
+        gCreationExtras.adoptPracticeDisplays(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR);
+    }
+
     // set() marks dirty; adopting persisted values is not a user edit.
     mDirty     = false;
     mSaveState = SETTINGS_SAVE_IDLE;
@@ -517,6 +529,8 @@ void Settings::stageInto(volatile SusamuneCfg *cfg) {
         FluddColors::stageInto(SUSAMUNE_FLUDD_COLORS_LIVE_PTR);
     if (cfg->flags & SUSAMUNE_CFG_FLAG_IL_EPISODES)
         ILing::stageEpisodes(SUSAMUNE_IL_EPISODES_LIVE_PTR);
+    if (cfg->flags & SUSAMUNE_CFG_FLAG_PRACTICE_DISPLAY_STYLE)
+        gCreationExtras.stagePracticeDisplaysInto(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR);
     MarioColors::clearDirty();
     FluddColors::clearDirty();
 }
@@ -537,7 +551,7 @@ void Settings::set(SettingId id, u8 value) {
 }
 
 bool Settings::favoriteable(SettingId id) {
-    return id >= 0 && id < SETTING_COUNT && name(id)[0] != '\0';
+    return id >= 0 && id <= SETTING_BUTTSLIDE_DISPLAY && name(id)[0] != '\0';
 }
 
 bool Settings::favorite(SettingId id) const {
@@ -577,12 +591,17 @@ void Settings::toggleFavorite(SettingId id) {
     mDirty = true;
 }
 
-static_assert(SETTING_COUNT - (SETTING_FAVORITES_10 + 1) <=
+static_assert(SETTING_BUTTSLIDE_DISPLAY + 1 - (SETTING_FAVORITES_10 + 1) <=
               (SETTING_FAVORITES_EXTRA_7 - SETTING_FAVORITES_EXTRA_0 + 1) * 7,
               "new settings need more Shined storage");
 #pragma clang section text=""
 
 void Settings::cycle(SettingId id, int dir) {
+    if (id == SETTING_JUMP_DISPLAY || id == SETTING_BUTTSLIDE_DISPLAY) {
+        set(SETTING_JUMP_DISPLAY, mValues[SETTING_JUMP_DISPLAY] ^
+            (id == SETTING_JUMP_DISPLAY ? 1u : 2u));
+        return;
+    }
     int n = choiceCount(kSettingDescs[id]);
     int v = (int)mValues[id] + dir;
     // Wrap into [0, n). dir is +/-1, so one add/sub suffices.
@@ -599,6 +618,9 @@ void Settings::cycle(SettingId id, int dir) {
 
 const char *Settings::valueLabel(SettingId id) const {
     static char numeric[16];
+    if (id == SETTING_JUMP_DISPLAY || id == SETTING_BUTTSLIDE_DISPLAY)
+        return PackedText::at(kChoiceLabels, (mValues[SETTING_JUMP_DISPLAY] &
+            (id == SETTING_JUMP_DISPLAY ? 1u : 2u)) != 0);
     if (id >= SETTING_NATIVE_TIMER_X && id <= SETTING_NATIVE_TIMER_SCALE) {
         int value = id == SETTING_NATIVE_TIMER_X ? ((int)mValues[id] - 16) * 10 :
                     id == SETTING_NATIVE_TIMER_Y ? ((int)mValues[id] - 12) * 10 :
@@ -612,10 +634,12 @@ const char *Settings::valueLabel(SettingId id) const {
 }
 
 const char *Settings::name(SettingId id) {
+    if (id == SETTING_BUTTSLIDE_DISPLAY) return "Buttslide display";
     return PackedText::at(kSettingNames, (int)id);
 }
 
 SettingCategory Settings::category(SettingId id) {
+    if (id == SETTING_BUTTSLIDE_DISPLAY) id = SETTING_JUMP_DISPLAY;
     return settingCategory(kSettingDescs[id]);
 }
 

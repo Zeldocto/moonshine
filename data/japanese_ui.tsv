@@ -1563,3 +1563,94 @@ Resume runs the game at normal speed and keeps free camera on.	フリーカメ�
 # Optional camera movement and rotation easing.
 Camera smoothing	カメラの補間時間
 Ease moving and turning starts/stops. Off responds immediately.	移動と回転の開始・停止を滑らかにします。Offなら即座に反応します。
+
+# V2.3.2 named layouts and passive movement timing.
+Layout profiles	レイアウト保存
+Save and switch between five named layouts.	名前付きレイアウトを5つ保存・切替できます。
+Layout profile	レイアウト
+Layout %u	レイアウト%u
+Name layout profile	レイアウト名
+Replace this layout profile?	このレイアウトを置き換えますか？
+Enter a profile name first	先に名前を入力してください。
+Layout storage is busy or unavailable	保存処理中、または保存先が使えません。
+Choose a saved layout profile	保存済みレイアウトを選んでください。
+Profile storage is unavailable.	レイアウトの保存先が使えません。
+Reading or saving layout profiles...	レイアウトを読み書きしています。
+Five layouts per game version. Binds and practice rules stay unchanged.	ゲーム版ごとに5つ保存。ボタン設定と練習ルールは変えません。
+{A} Apply    {Y} Save current layout	{A} 適用    {Y} 現在の配置を保存
+Layout file is damaged; current layout kept	ファイルが壊れています。現在の配置を保持します。
+Profile changed; reopen Layout profiles	保存内容が変わりました。この画面を開き直してください。
+That layout profile is empty	このレイアウトは空です。
+Layout storage error; current layout kept	保存エラー。現在の配置を保持します。
+Layout profile saved	レイアウトを保存しました。
+Layout profile applied	レイアウトを適用しました。
+GB skip timing	GBすり抜けタイミング
+Jump display	ジャンプ表示
+B timing after a full A jump: target 9f, Y404, V6. Edit its style below.	最大Aジャンプ後のB入力。目標9f・Y404・V6。下の項目から表示を編集。
+Early	早い
+On time	適切
+Check jump	ジャンプ要確認
+Landing	着地後
+Buttslide	おしりすべり
+Jump ready	ジャンプ可能
+
+# Runner-provided achievement title translations (September 13 proposal).
+Dock Knock	船揚げ
+Chain Reaction	鎖の反動
+Squid Pro Quo	イカ乗りのプロ
+Leaf Me Here	置いていかないで
+Praise the Sun	太陽を讃えよ
+Uncorked	祝杯
+Goopy Business	汚れ掃除職業
+Stop, Thief!	待て！泥棒！
+Hillside Heist	ビアンコ丘の強盗
+Triple Terror	三重奏
+Stop Right There, Criminal Scum	そこに止まれ
+Security!!	もう安全だ！
+By the Order of the Elder!	長老の命令により
+The House Always Wins	最後には胴元が勝つ
+Mantastic	素晴らしい
+Bombastic Balloons	へんな風船
+Skipped Sumi	墨キャンセル
+Perfect Peter	豪運の持ち主
+The Culmination	集大成
+Lost and FLUDD	失った水
+A New Leaf	新しい葉
+Reef Runner	岩礁ダイバー
+Ruins Rampage	遺跡を大暴れ
+No Safety Net	命知らず
+Orange's Quest	オレンジからの挑戦状
+Rooted	根気強く
+No Refunds	返金できません
+Pieces rouges de la grotte	洞窟の赤い空洞
+Scooby Dooby Doo	迷惑な客
+Surf's Up	波乗り
+Robbing the Village	村の強盗
+Hotel Loyalty	ロイヤル ホテル
+Brush Your Teeth	歯を磨こう
+Round and Round	周れ周れ
+Clean Sweep	綺麗な射線
+He Loves Squids	イカが大好きな彼
+Motion Sickness	ロボット
+Baywatch	入り江をご覧ください
+Thanks for My Gun	ありがとう 友よ
+A Certain Someone	誰かさんにとって
+New Kid on the Block	新参者
+By a Nose	僅差
+Mirror Match	ミラー勝負
+Upstart	準備はできた
+Serious Business	深刻な問題
+Magnate	大富豪
+Stranger Danger	危ないヤツ
+Dead Heat	デッドヒート
+Robber Baron	ナイトバロン
+Mogul	たいしたもんだ
+Tycoon	超大物
+Emperor	皇帝
+Buttslide display	おしりすべり表示
+Jump timing after landing.	着地から次のジャンプまでのフレーム数と、離陸したQFを表示。
+When a buttslide jump is ready.	おしりすべり中にジャンプできるタイミングを小さく表示。
+%uf qf%u	%uf qf%u
+%s qf%u	%s qf%u
+%s %u%sf Y%.0f V%.1f	%s %u%sf Y%.0f V%.1f
+Ready	ジャンプ可能

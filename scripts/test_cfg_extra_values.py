@@ -35,6 +35,8 @@ extern "C" void*memset(void*d,int c,__SIZE_TYPE__ n){u8*a=(u8*)d;while(n--)*a++=
         code += function(settings, 'Settings::set')
         code += function(settings, 'Settings::cycle')
         code += function(settings, 'Settings::valueLabel')
+        code += function(settings, 'Settings::name')
+        code += function(settings, 'Settings::category')
         defaults = function(settings, 'Settings::resetDefaults')
         code += 'void Settings::resetDefaults(){' + defaults[defaults.index('    for (int i'):]
         adopt = function(settings, 'Settings::adopt')
@@ -61,6 +63,8 @@ API unsigned count(){return cfg.count;}
 API unsigned smoothingId(){return SETTING_FREE_CAMERA_SMOOTHING;}
 API void cycle(unsigned index,int direction){settings.cycle((SettingId)index,direction);}
 API const char*label(unsigned index){return settings.valueLabel((SettingId)index);}
+API const char*name(unsigned index){return Settings::name((SettingId)index);}
+API unsigned category(unsigned index){return Settings::category((SettingId)index);}
 API unsigned cardRoundtrip(unsigned oldCount){
  memset(&record,0,sizeof(record));record.magic=kRecordMagic;record.version=kRecordVersion;
  record.payloadSize=kRecordPayloadSize;record.gameVersion=SUSAMUNE_GAME_VERSION;
@@ -82,6 +86,7 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
             raise RuntimeError(result.stdout+result.stderr)
         cls.lib = C.CDLL(str(path.with_suffix('.dll')))
         cls.lib.label.restype = C.c_char_p
+        cls.lib.name.restype = C.c_char_p
         cls.addClassCleanup(lambda:C.windll.kernel32.FreeLibrary(C.c_void_p(cls.lib._handle)))
 
     def test_wire_boundaries_preserve_bind_and_ack_cache_lines(self):
@@ -123,7 +128,7 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
         self.lib.set(128, 4)
         self.lib.set(129, 1)
         self.lib.stage()
-        self.assertEqual(self.lib.count(), 140)
+        self.assertEqual(self.lib.count(), 142)
         self.assertEqual([self.lib.read(i) for i in (128,129)], [4,1])
         self.assertEqual(bytes(self.lib.byteAt(i) for i in range(192,320)), b'\xa5'*128)
 
@@ -156,7 +161,7 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
         self.assertEqual(self.lib.get(138), 1)
         self.lib.set(138, 0)
         self.lib.stage()
-        self.assertEqual(self.lib.count(), 140)
+        self.assertEqual(self.lib.count(), 142)
         self.assertEqual(self.lib.read(138), 0)
         self.assertEqual(self.lib.cardRoundtrip(0), 1)
         self.assertEqual(self.lib.get(138), 0)
@@ -194,6 +199,47 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
         self.assertLess(service.index('sync_before_read(cfg, 32)'), service.index('WriteIniFile(cfg)'))
         self.assertIn('sync_after_write(&cfg->ackSeq, 32)', service)
         self.assertNotIn('sync_after_write(cfg,', service)
+
+    def test_new_timing_displays_default_off_and_use_last_two_header_bytes(self):
+        self.lib.reset(140)
+        self.lib.adopt()
+        self.assertEqual([self.lib.get(i) for i in (140, 141)], [0, 0])
+        for index in (140, 141):
+            self.lib.set(index, 1)
+        self.lib.stage()
+        self.assertEqual([self.lib.read(i) for i in (140, 141)], [1, 1])
+        self.assertEqual(bytes(self.lib.byteAt(i) for i in range(192, 320)), b'\xa5' * 128)
+        self.assertEqual(self.lib.cardRoundtrip(0), 1)
+        self.assertEqual([self.lib.get(i) for i in (140, 141)], [1, 1])
+        for value, label in enumerate(('Off', 'On', 'Off', 'On')):
+            self.lib.set(141, value)
+            self.assertEqual(self.lib.label(141).decode(), label)
+            self.assertEqual(self.lib.cardRoundtrip(0), 1)
+            self.assertEqual(self.lib.get(141), value)
+        self.lib.cycle(141, 1)
+        self.assertEqual(self.lib.get(141), 2)
+        self.lib.set(141, 4)
+        self.assertEqual(self.lib.get(141), 0)
+
+    def test_jump_and_buttslide_alias_toggle_independently_without_new_wire_bytes(self):
+        self.assertEqual(self.lib.name(141), b'Jump display')
+        self.assertEqual(self.lib.name(142), b'Buttslide display')
+        self.assertEqual(self.lib.category(141), self.lib.category(142))
+        for mask in range(4):
+            for setting, bit in ((141, 1), (142, 2)):
+                for direction in (-1, 1):
+                    self.lib.reset(142)
+                    self.lib.set(141, mask)
+                    self.assertEqual(self.lib.label(setting), b'On' if mask & bit else b'Off')
+                    self.lib.cycle(setting, direction)
+                    self.assertEqual(self.lib.get(141), mask ^ bit)
+                    self.assertEqual(self.lib.label(setting), b'Off' if mask & bit else b'On')
+                    self.lib.stage()
+                    self.assertEqual(self.lib.count(), 142)
+                    self.assertEqual(self.lib.read(141), mask ^ bit)
+                    self.assertEqual(self.lib.read(142), 255)
+                    self.assertEqual(self.lib.cardRoundtrip(0), 1)
+                    self.assertEqual(self.lib.get(141), mask ^ bit)
 
 
 if __name__ == '__main__':

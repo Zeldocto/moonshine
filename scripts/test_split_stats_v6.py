@@ -350,7 +350,7 @@ class SchemaContracts(unittest.TestCase):
         ]
         self.assertEqual(values, list(range(ROUTES + 1)))
         source = SPLITS.read_text(encoding="utf-8")
-        self.assertIn("bool supportsEntry(int entry) { return routeForEntry(entry) >= 0; }",
+        self.assertIn("bool supportsEntry(int entry) { return sState && routeForEntry(entry) >= 0; }",
                       source)
         self.assertIn("out->segmentCount = segmentCount(desc);", source)
         self.assertIn("captureSegment(route, desc.checkpointCount, qf);", source)

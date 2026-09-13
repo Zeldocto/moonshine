@@ -10,7 +10,7 @@ public:
     void showCheckpointPrompt() { mPage = CHECKPOINTS; mSel = 0; mReplaceConfirm = false; focus(); }
     bool grabsInput() const override {
         // The recorder owns every button, including its final commit frame.
-        return mBinding || gBinds.recording() ||
+        return mBinding || gBinds.recording() || mPage == NAME ||
             ((mPage != MAIN || TasProject::busy()) && !gBinds.wasPressedRaw(BIND_MENU_TOGGLE));
     }
     bool suppressesBinds() const override { return true; }

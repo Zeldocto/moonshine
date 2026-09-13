@@ -65,6 +65,8 @@ bool resultPending();
 bool departureResultPending();
 // Preset-only action overlay. The persisted Fast Text preference is untouched.
 bool fastTextSuppressed();
+// Fast Any% starts at each course entrance; standalone IL starts stay exact.
+bool fastAnyStart(int entry);
 // True only while the active playlist item deliberately credits a different
 // result than the level it starts in.
 bool activeRouteMatches(int startEntry, int resultEntry);

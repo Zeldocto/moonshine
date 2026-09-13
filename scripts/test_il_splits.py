@@ -648,11 +648,13 @@ class SplitContractTests(unittest.TestCase):
         self.assertEqual(FILE_HEADER.size, 0x20)
         self.assertEqual(MAILBOX_OFFSET + MAILBOX_SIZE, 0xF780)
 
-    def test_split_runtime_is_bss_and_mailbox_partition_is_exact(self) -> None:
+    def test_split_runtime_uses_the_owned_metadata_tail_and_mailbox_is_unchanged(self) -> None:
         text = MEM2.read_text(encoding="utf-8")
         source = SPLITS.read_text(encoding="utf-8")
-        self.assertNotIn("SPLIT_STATS_RUNTIME", text)
-        self.assertIn("Runtime sStateStorage;", source)
+        self.assertIn("SUSAMUNE_SPLIT_STATS_RUNTIME_OFFSET   0x00008720u", text)
+        self.assertIn("SUSAMUNE_SPLIT_STATS_RUNTIME_SIZE     0x000037A0u", text)
+        self.assertNotIn("Runtime sStateStorage;", source)
+        self.assertIn("Runtime *sState;", source)
         self.assertIn("sizeof(Runtime) == 0x3790", source)
         self.assertEqual(MAILBOX_OFFSET + MAILBOX_SIZE, 0xF780)
 

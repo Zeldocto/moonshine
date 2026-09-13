@@ -1,4 +1,5 @@
 #include "susamune/practice_session.hxx"
+#include "susamune/movement_timing_display.hxx"
 #include "susamune/retail_input.hxx"
 #include "susamune/state_crc.hxx"
 #include "susamune/crash_report.hxx"
@@ -1845,6 +1846,7 @@ bool SavestateManager::loadSlot(u32 slot, u32 expectedGeneration) {
     GhostStorage::onSavestateLoaded();
     rngControlOnSavestateLoaded();
     MovementDisplay::onSavestateLoaded();
+    MovementTimingDisplay::onSavestateLoaded();
     gCreationExtras.onSavestateLoaded();
     // An armed warp lives in mod BSS, outside the restored game snapshot.
     // Cancel it before ILing adopts the save-time attempt state.

@@ -1,4 +1,4 @@
-# Moonshine V2.3.1 Frame By Frame
+# Moonshine V2.3.2 Frame By Frame
 
 User guide · English
 
@@ -37,6 +37,7 @@ The app itself stays in `/apps/moonshine_launcher`.
 | `ghosts/` | Your ghosts; incoming files go in `import/`, exports in `share/` |
 | `states/` | Named SD savestates |
 | `tas/` | Saved TAS projects |
+| `layouts/` | Five named layout profiles for each game region |
 | `crashes/` | Crash reports; keep each matching text/binary/core set together |
 | `backups/` | Preserved files from migration or backup operations |
 
@@ -199,7 +200,9 @@ Exported shareable ghosts live under `Moonshine data/ghosts/share/` on the launc
 
 ## Layout and colours
 
-Display > Layout editor has separate groups for Timers, Controller inputs, Metadata, Native HUD colours, Custom text, Practice feedback, and Menu and notifications. Rollout and dust editors are also beside their settings in HUD and displays > Movement feedback.
+**Display > Layout profiles** saves five named layouts for each game region. Press **Y** to save the current layout, enter a name and press **Start**. While typing, the keyboard owns the buttons even if they are also bound to Close or Pause; **X+Start** cancels. Replacing a saved profile asks first. Press **A** to apply a saved profile. This includes overlays, custom text, timer and menu styles, Mario/FLUDD colours and visual options; binds, practice rules and records stay separate. Profiles survive reboot on the launcher's storage device or Dolphin's Slot B memory card. Applying a profile also saves it as your current layout.
+
+Display > Layout editor has separate groups for Timers, Controller inputs, Metadata, Native HUD colours, Custom text, Practice feedback, and Menu and notifications. Rollout and dust editors are also beside their settings in HUD and displays > Movement displays.
 
 **Timers > Sunshine timer** opens the full editor: position, size, opacity, brightness, all 13 characters, TIME/TEMPO and the streak. Its position range spans the full screen.
 
@@ -219,6 +222,18 @@ The shared colour editor uses **Hue, Saturation and Lightness (HSL)**. Hue choos
 Mario's skin stays unchanged. Magenta on the cap and shirt no longer produces red specks when texture colours round to the same value. Sprayed water covers the stream, outlet mist and impact splashes; sea water and Yoshi juice keep their normal colours. Keep the edits to save the colours and each part's Original/Custom choice for the next boot.
 
 **Metadata** adds Field gap, Row gap, Fields per row and Value widths. C-stick left/right decreases or increases these values. Choose horizontal layout to arrange several fields per row; Fields per row limits the number before wrapping. Auto wraps at the screen edge. Stable widths keep values aligned as digits change; Compact reduces empty space. Per-character colours remain attached to their original fields.
+
+## Movement timing displays
+
+Open **Display > HUD and displays > Movement displays** to enable **Jump display** or **GB skip timing**. Use the Edit rows on that page, or **Layout editor > Practice feedback**, to change GB timing, Jump timing and Buttslide separately. Each has its own position, size, opacity, background and colours.
+
+**Jump display** measures game frames from your most recent landing to your next jump. It shows **1f–6f**, then **Late**, alongside the takeoff's quarter-frame phase. `1f qf2` means you jumped one rendered game frame after landing, on quarter-frame phase 2. Paused frames do not count, and changing areas or loading a state clears the result.
+
+**Jump display** and **Buttslide display** have separate On/Off toggles and can be shown together. Buttslide shows a compact **Ready / Waiting** cue during your slide, using the current surface and slide state. It also works while frame advancing. It does not press or queue A for you.
+
+**GB skip timing** checks the B press after an ordinary full A jump for the no-hover GB skip. The supplied target is 9 airborne frames with Y approximately 404 and vertical speed approximately 6. It displays Early, On time, Late or Check jump with those values. It does not check X/Z or confirm that Mario clipped through.
+
+In **Fast Any%**, Pinna routes start on the beach and Noki 3 starts outside the bottle. Dying in a secret and then finishing still advances the loader. That retry does not count as a clean full-level PB or playlist best. Ordinary standalone IL starts are unchanged.
 
 ## Dolphin
 
