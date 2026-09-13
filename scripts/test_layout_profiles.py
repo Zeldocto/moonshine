@@ -52,7 +52,7 @@ static void DCFlushRange(const void*,u32){++flushes;}
         types = dict(re.findall(r'struct (Susamune\w+) (\w+);', (ROOT/'include/susamune/layout_profile.h').read_text()))
         by_field = {v:k for k,v in types.items()}
         for index, (name, members) in enumerate((('InputDisplay', pairs[0]), ('MetadataDisplay', pairs[1]),
-                                                ('QftDisplay', pairs[2]), ('CreationExtras', ('creation','wallkick','movement','nativeTimer')))):
+                                                ('QftDisplay', pairs[2]), ('CreationExtras', ('creation','wallkick','movement','nativeTimer','practiceDisplays')))):
             fixture += f'struct {name}{{bool editing(){{return edits&(1u<<{index});}}\n'
             if name == 'InputDisplay':
                 fixture += 'bool visible(){return inputVisible;}\n'
@@ -191,7 +191,7 @@ API void set_sequence(u32 sequence){mailbox.requestSeq=mailbox.ackSeq=sequence;}
                 lib.setup(0);lib.fill(0x21);lib.seed(2,7);lib.request(3,2,0);lib.reply(0,7,0,0)
                 lib.block(edit,pending,0);self.assertIsNone(lib.poll());self.assertEqual(lib.get(2),0)
                 lib.block(0,0,0);self.assertEqual(lib.poll(),b'Layout profile applied')
-                self.assertEqual([lib.get(i) for i in (1,2,3,4,13)],[0,11,1,1,1])
+                self.assertEqual([lib.get(i) for i in (1,2,3,4,13)],[0,12,1,1,1])
                 self.assertIsNone(lib.poll());self.assertEqual(lib.get(3),1)
 
     def test_dolphin_failed_lock_preserves_layout_and_retries_once_lock_returns(self):
@@ -249,24 +249,68 @@ class LayoutProfileMenuTests(unittest.TestCase):
         tab=menu[menu.index('class LayoutProfilesTab final'):menu.index('class CreationTab final')]
         raw=(ROOT/'include/susamune/raw_prompt_input.hxx').read_text()
         raw=raw[raw.index('class RawPromptInput {'):raw.index('#endif')]
+        keyboard_source=(ROOT/'src/creation_extras.cpp').read_text()
+        keyboard='\n'.join(re.findall(r'^const char gCreation\w+\[[^\]]*\] = [^\n]+;', keyboard_source, re.M))
+        keyboard+='\n'+function_source(ROOT/'src/creation_extras.cpp', 'bool updateCreationKeyboardText(')
+        bind_raw='\n'.join(function_source(ROOT/'include/susamune/binds.hxx', signature)
+                           for signature in ('bool wasPressedRaw(', 'bool wasPressedSubsetRaw('))
+        main=(ROOT/'src/main.cpp').read_text()
+        # Execute the production pre-direct menu ownership and Pause/Step gate.
+        main_gate='\n'.join(re.search(pattern, main, re.S).group(0) for pattern in (
+            r'const bool menuOpenBeforeDirect = [^;]+;',
+            r'bool menuOwnsRetailPad = [^;]+;',
+            r'bool practiceModal = [^;]+;'))
+        main_gate+='\n'+function_source(ROOT/'src/main.cpp', 'if (sessionResultBeforeDirect || menuOwnsRetailPad)')
+        main_gate+='\n'+re.search(r'PatternSelector::update\([^;]+;', main, re.S).group(0)
+        main_gate+='\n'+main[main.index('bool practiceStepConsumed = false;'):
+                             main.index('        if (gBinds.wasPressed(BIND_FREE_CAMERA))')]+ '\n}\n'
+        classic=function_source(ROOT/'src/warp_wheel.cpp', 'bool updateClassicInstant(')
+        # Stop at the dispatch boundary; the actual release latch runs unchanged.
+        classic=classic[:classic.index('    LevelWarp::Dest dest;')]+'return true;\n}\n'
         fixture=r'''
 typedef unsigned char u8;typedef unsigned short u16;typedef unsigned int u32;
-enum{MOONSHINE_LAYOUT_COUNT=5,MOONSHINE_LAYOUT_NAME_SIZE=16,ROW_H=22,FOOT_SZ=12,BIND_MENU_TOGGLE};
+enum{MOONSHINE_LAYOUT_COUNT=5,MOONSHINE_LAYOUT_NAME_SIZE=16,ROW_H=22,FOOT_SZ=12};
+enum BindId{BIND_MENU_TOGGLE,BIND_PRACTICE_PAUSE,BIND_PRACTICE_STEP,
+BIND_PRACTICE_SPIN_CW,BIND_PRACTICE_SPIN_CCW,BIND_COUNT};
 #define SUSAMUNE_GLYPH_A "A"
 #define SUSAMUNE_GLYPH_B "B"
 #define SUSAMUNE_GLYPH_Y "Y"
-struct JUTGamePad{enum{A=1,B=2,Y=4,START=8,Z=16};struct Pad{u16 mButton;};static Pad mPadStatus[1];};
+struct JUTGamePad{enum{A=1,B=2,Y=4,START=8,Z=16,L=256,R=512,DPAD_UP=8192};struct Pad{u16 mButton;};static Pad mPadStatus[1];};
 JUTGamePad::Pad JUTGamePad::mPadStatus[1];
-struct TMarioGamePad{enum{X=32,CSTICK_UP=64,CSTICK_DOWN=128};struct{u32 mInput;}mButtons;};
-static u32 nav;static const char *toast;
+struct TMarioGamePad{enum{A=1,B=2,Y=4,X=32,CSTICK_UP=64,CSTICK_DOWN=128,L=256,R=512,
+DPAD_DOWN=1024,DPAD_LEFT=2048,DPAD_RIGHT=4096,DPAD_UP=8192};struct{u32 mInput,mRapidInput;}mButtons;};
+static u32 nav,tabSwitches,pauseRequests,stepRequests,classicDispatches;static const char *toast;
+class MenuTab;
 struct Menu{u32 navigationInput(TMarioGamePad*){return nav;}void toast(const char*t){::toast=t;}
-void fillBox(int,int,int,int,int){}void drawText(const char*,int,int,int,int,int){}};
-struct Binds{bool closing;bool wasPressedRaw(int){return closing;}}gBinds;
+void fillBox(int,int,int,int,int){}void drawText(const char*,int,int,int,int,int){}
+void update(TMarioGamePad*);bool suppressesBinds()const;bool shown()const{return mShown;}
+void pollSettingsSave(){}void requestSettingsSave(){}void switchTab(int){++tabSwitches;}
+bool mShown;int mCurTab,mToastFrames,mCRepeatFrames;MenuTab*mTabs[1];};
+struct Binds{u16 mMask[BIND_COUNT],mHeld,mPrevHeld;bool mRecSilent;
+bool dirty(){return false;}bool recording(){return false;}
+void suppressUntilRelease(){mRecSilent=true;}
+void sample(){mPrevHeld=mHeld;mHeld=JUTGamePad::mPadStatus[0].mButton;if(!mHeld)mRecSilent=false;}
+bool wasPressedPracticeRaw(BindId)const;
+''' + bind_raw + r'''
+}gBinds;
+''' + function_source(ROOT/'src/binds.cpp', 'bool Binds::wasPressedPracticeRaw(') + r'''
+struct Appearance{bool dirty(){return false;}void update(){}}gSettings,gInputDisplay,gMetadataDisplay,gQftDisplay,gCreationExtras;
+namespace MarioColors{bool dirty(){return false;}}
+namespace FluddColors{bool dirty(){return false;}}
+namespace WarpWheel{bool promptPending(){return false;}bool promptShown(){return false;}
+bool sClassicInstantHeld,sClassicInstantPending,sClassicInstantSuppressed;
+const u16 kInstantBase=JUTGamePad::B|JUTGamePad::DPAD_UP;
+''' + function_source(ROOT/'src/warp_wheel.cpp', 'void suppressClassicInstantUntilRelease()') + classic + r'''
+}
+namespace PatternSelector{bool inputAllowed;void update(bool allowInput){inputAllowed=allowInput;}}
+namespace StageTargets{void service(Menu*){}}
+namespace PracticeSession{bool requestStep(){++stepRequests;return true;}void requestPauseToggle(){++pauseRequests;}}
+void updateAchievementBanner(){}
 bool rngControlInvalidatesIl(){return false;}
 int wrap(int x,int n){return (x+n)%n;}int cPanel(){return 0;}int cRowSel(){return 0;}int cRow(){return 0;}int cFooter(){return 0;}
 extern "C" __SIZE_TYPE__ strlen(const char*p){__SIZE_TYPE__ n=0;while(p[n])++n;return n;}
 extern "C" int snprintf(char*d,__SIZE_TYPE__ n,const char*,...){const char*p="Name";int i=0;while(p[i]&&i+1<n){d[i]=p[i];++i;}if(n)d[i]=0;return i;}
-void updateCreationKeyboardText(TMarioGamePad*,char*,u8&,u32,u8&,bool&,u8&){}
+''' + keyboard + r'''
 void drawCreationKeyboard(Menu*,const char*,const char*,u8,bool,u8){}
 void drawValueRow(Menu*,int,int,int,const char*,const char*,bool,bool,bool){}
 void drawHelpLine(Menu*,int,int,int,int,const char*){}
@@ -279,28 +323,48 @@ bool isBusy,exists;u32 currentGeneration,savedGeneration,saves,loads,refreshes,s
 bool available(){return true;}bool busy(){return isBusy;}bool present(u32){return exists;}
 bool damaged(u32){return false;}u32 generation(u32){return exists?currentGeneration:0;}
 const char*name(u32){return exists?"Existing":"";}bool refresh(){++refreshes;return true;}
+const char*poll(){return nullptr;}
 bool save(u32 slot,const char*,u32 expected){++saves;savedSlot=slot;savedGeneration=expected;return true;}
 bool load(u32){++loads;return exists;}}
 ''' + function_source(ROOT/'src/menu.cpp', 'void drawFooterText(') + raw + '\n#define private public\n' + tab + r'''
 #undef private
+''' + function_source(ROOT/'src/menu.cpp', 'bool Menu::suppressesBinds() const') + '\n' + function_source(ROOT/'src/menu.cpp', 'void Menu::update(') + r'''
 void*operator new(__SIZE_TYPE__,void*p){return p;}
 alignas(8) static u8 storage[sizeof(LayoutProfilesTab)];static LayoutProfilesTab *page;
-static Menu menu;static TMarioGamePad pad;
+static Menu menu,*gMenu=&menu;static TMarioGamePad pad;
+static bool grabbedBefore,suppressedBefore;
 #define API extern "C" __declspec(dllexport)
 API void reset(){LayoutProfiles::isBusy=LayoutProfiles::exists=false;
 LayoutProfiles::currentGeneration=7;LayoutProfiles::savedGeneration=LayoutProfiles::saves=LayoutProfiles::loads=LayoutProfiles::refreshes=0;
-JUTGamePad::mPadStatus[0].mButton=0;nav=0;toast=nullptr;gBinds.closing=false;
-page=new(storage)LayoutProfilesTab();page->focus();}
-API void press(u32 buttons){JUTGamePad::mPadStatus[0].mButton=(u16)buttons;pad.mButtons.mInput=buttons;
-page->update(&menu,&pad);JUTGamePad::mPadStatus[0].mButton=0;pad.mButtons.mInput=0;page->update(&menu,&pad);}
-API void down(){nav=TMarioGamePad::CSTICK_DOWN;page->update(&menu,&pad);nav=0;}
+JUTGamePad::mPadStatus[0].mButton=0;nav=0;toast=nullptr;
+gBinds.mHeld=gBinds.mPrevHeld=0;gBinds.mRecSilent=false;for(u32 i=0;i<BIND_COUNT;++i)gBinds.mMask[i]=0;
+pad.mButtons.mInput=pad.mButtons.mRapidInput=0;tabSwitches=pauseRequests=stepRequests=classicDispatches=0;
+WarpWheel::sClassicInstantHeld=WarpWheel::sClassicInstantPending=WarpWheel::sClassicInstantSuppressed=false;
+PatternSelector::inputAllowed=false;
+page=new(storage)LayoutProfilesTab();page->focus();
+menu.mShown=true;menu.mCurTab=menu.mToastFrames=menu.mCRepeatFrames=0;menu.mTabs[0]=page;
+grabbedBefore=suppressedBefore=false;}
+API void frame(u32 buttons){JUTGamePad::mPadStatus[0].mButton=(u16)buttons;
+pad.mButtons.mInput=buttons;pad.mButtons.mRapidInput=buttons&~gBinds.mHeld;gBinds.sample();
+grabbedBefore=page->grabsInput();suppressedBefore=menu.suppressesBinds();
+if(suppressedBefore)gBinds.suppressUntilRelease();
+const bool tasCinematic=false,stepOverridesShortcut=false,creationEditing=false,
+sessionBlocksNewInput=false,wheelOwnsInputBeforeDirect=false,stateDiskBusy=false,sessionResultBeforeDirect=false;
+''' + main_gate + r'''
+if(WarpWheel::updateClassicInstant(&pad))++classicDispatches;
+menu.update(&pad);}
+API void press(u32 buttons){frame(buttons);frame(0);}
+API void configure(u32 close,u32 pause){gBinds.mMask[BIND_MENU_TOGGLE]=(u16)close;gBinds.mMask[BIND_PRACTICE_PAUSE]=(u16)pause;}
+API void down(){nav=TMarioGamePad::CSTICK_DOWN;frame(0);nav=0;}
 API void existing(u32 yes,u32 gen){LayoutProfiles::exists=yes!=0;LayoutProfiles::currentGeneration=gen;}
 API void busy(u32 yes){LayoutProfiles::isBusy=yes!=0;}
 API void back(){page->back();}
-API u32 close_grab(){gBinds.closing=true;return page->grabsInput();}
 API u32 get(u32 key){switch(key){case 0:return page->mMode;case 1:return page->mSel;
 case 2:return LayoutProfiles::saves;case 3:return LayoutProfiles::savedGeneration;
-case 4:return LayoutProfiles::savedSlot;case 5:return page->mLength;case 6:return LayoutProfiles::loads;}
+case 4:return LayoutProfiles::savedSlot;case 5:return page->mLength;case 6:return LayoutProfiles::loads;
+case 7:return menu.mShown;case 8:return page->mCursor;case 9:return pauseRequests;
+case 10:return grabbedBefore;case 11:return suppressedBefore;case 12:return tabSwitches;case 13:return page->mPage;
+case 14:return PatternSelector::inputAllowed;case 15:return WarpWheel::sClassicInstantSuppressed;case 16:return classicDispatches;}
 return 0;}
 '''
         path=Path(cls.temp.name)/'menu.cpp';path.write_text(fixture)
@@ -329,11 +393,65 @@ return 0;}
         self.lib.existing(1,10);self.lib.press(8)
         self.assertEqual([self.lib.get(i) for i in (2,3)],[1,9])
 
-    def test_clear_name_requires_new_name_and_close_chord_is_available(self):
+    def test_clear_name_requires_new_name_before_start_can_save(self):
         self.lib.press(4);self.assertEqual(self.lib.get(0),2)
-        self.assertEqual(self.lib.close_grab(),0)
         self.lib.press(16);self.assertEqual(self.lib.get(5),0)
         self.lib.press(8);self.assertEqual([self.lib.get(i) for i in (0,2)],[2,0])
+
+    def test_dpad_down_bound_to_close_and_pause_moves_naming_cursor_only(self):
+        self.lib.configure(1024,1024)
+        self.lib.press(4);self.assertEqual(self.lib.get(0),2)
+        self.lib.frame(1024)
+        self.assertEqual([self.lib.get(i) for i in (0,7,8,9,10,11,14)], [2,1,8,0,1,1,0])
+        self.lib.frame(1024)
+        self.assertEqual([self.lib.get(i) for i in (7,8,9)], [1,8,0])
+        self.lib.frame(0);self.lib.frame(1024)
+        self.assertEqual([self.lib.get(i) for i in (0,7,8,9)], [2,1,16,0])
+
+    def test_confirmation_and_final_save_frame_keep_input_from_close_and_pause(self):
+        self.lib.existing(1,9);self.lib.press(4)
+        self.assertEqual(self.lib.get(0),1)
+        self.lib.configure(1,1);self.lib.frame(1)
+        self.assertEqual([self.lib.get(i) for i in (0,7,9,10)], [2,1,0,1])
+        self.lib.frame(0);self.lib.configure(8,8);self.lib.frame(8)
+        self.assertEqual([self.lib.get(i) for i in (0,2,3,7,9,10,14)], [0,1,9,1,0,1,0])
+        self.lib.frame(8)
+        self.assertEqual([self.lib.get(i) for i in (2,7,9)], [1,1,0])
+        self.lib.frame(0);self.lib.frame(8)
+        self.assertEqual([self.lib.get(i) for i in (2,7,9,10,14)], [1,0,0,0,0])
+
+    def test_explicit_cancel_frame_cannot_close_menu_or_pause_game(self):
+        self.lib.press(4);self.lib.configure(32|8,32|8)
+        self.lib.frame(32|8)
+        self.assertEqual([self.lib.get(i) for i in (0,2,7,9,10,14)], [0,0,1,0,1,0])
+        self.lib.frame(32|8)
+        self.assertEqual([self.lib.get(i) for i in (2,7,9)], [0,1,0])
+        self.lib.frame(0);self.lib.frame(32|8)
+        self.assertEqual([self.lib.get(i) for i in (7,9)], [0,0])
+
+    def test_configured_close_still_works_on_list_and_opening_frame_blocks_pause(self):
+        self.lib.configure(1024,1024);self.lib.frame(1024)
+        self.assertEqual([self.lib.get(i) for i in (0,7,9,10,14)], [0,0,0,0,0])
+        self.lib.frame(1024);self.assertEqual(self.lib.get(7),0)
+        self.lib.frame(0);self.lib.frame(1024)
+        self.assertEqual([self.lib.get(i) for i in (0,7,9,14)], [0,1,0,0])
+
+    def test_keyboard_page_chord_does_not_switch_tab_or_enable_pattern_selector(self):
+        self.lib.press(4);self.lib.frame(256|1024)
+        self.assertEqual([self.lib.get(i) for i in (0,7,12,13,14)], [2,1,0,1,0])
+
+    def test_classic_restart_stays_suppressed_through_menu_close_until_release(self):
+        restart=2|8192
+        self.lib.configure(restart,0);self.lib.press(4)
+        self.lib.frame(restart)
+        self.assertEqual([self.lib.get(i) for i in (0,7,8,15,16)], [2,1,24,1,0])
+        self.lib.frame(0);self.lib.press(32|8)
+        self.lib.frame(restart)
+        self.assertEqual([self.lib.get(i) for i in (7,15,16)], [0,1,0])
+        self.lib.configure(0,0);self.lib.frame(restart)
+        self.assertEqual([self.lib.get(i) for i in (7,15,16)], [0,1,0])
+        self.lib.frame(0);self.assertEqual(self.lib.get(15),0)
+        self.lib.frame(restart);self.assertEqual(self.lib.get(16),1)
 
     def test_storage_ownership_blocks_navigation_and_load_save_requests(self):
         self.lib.busy(1);self.lib.down();self.lib.press(4);self.lib.press(1)

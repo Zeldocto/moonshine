@@ -200,7 +200,7 @@ Exported shareable ghosts live under `Moonshine data/ghosts/share/` on the launc
 
 ## Layout and colours
 
-**Display > Layout profiles** saves five named layouts for each game region. Press **Y** to save the current layout, enter a name and press **Start**. Replacing a saved profile asks first. Press **A** to apply a saved profile. This includes overlays, custom text, timer and menu styles, Mario/FLUDD colours and visual options; binds, practice rules and records stay separate. Profiles survive reboot on the launcher's storage device or Dolphin's Slot B memory card. Applying a profile also saves it as your current layout.
+**Display > Layout profiles** saves five named layouts for each game region. Press **Y** to save the current layout, enter a name and press **Start**. While typing, the keyboard owns the buttons even if they are also bound to Close or Pause; **X+Start** cancels. Replacing a saved profile asks first. Press **A** to apply a saved profile. This includes overlays, custom text, timer and menu styles, Mario/FLUDD colours and visual options; binds, practice rules and records stay separate. Profiles survive reboot on the launcher's storage device or Dolphin's Slot B memory card. Applying a profile also saves it as your current layout.
 
 Display > Layout editor has separate groups for Timers, Controller inputs, Metadata, Native HUD colours, Custom text, Practice feedback, and Menu and notifications. Rollout and dust editors are also beside their settings in HUD and displays > Movement displays.
 
@@ -225,7 +225,7 @@ Mario's skin stays unchanged. Magenta on the cap and shirt no longer produces re
 
 ## Movement timing displays
 
-Open **Display > HUD and displays > Movement displays** to enable **Jump display** or **GB skip timing**. Both use the wallkick display's position, size and colours. A timing result temporarily replaces the wallkick readout in that position.
+Open **Display > HUD and displays > Movement displays** to enable **Jump display** or **GB skip timing**. Use the Edit rows on that page, or **Layout editor > Practice feedback**, to change GB timing, Jump timing and Buttslide separately. Each has its own position, size, opacity, background and colours.
 
 **Jump display** measures game frames from your most recent landing to your next jump. It shows **1f–6f**, then **Late**, alongside the takeoff's quarter-frame phase. `Jump: 1f QF2` means you jumped one rendered game frame after landing, on quarter-frame phase 2. Paused frames do not count, and changing areas or loading a state clears the result.
 

@@ -69,10 +69,11 @@ void *memcpy(void*d,const void*s,unsigned long long n){
 struct Menu{};
 struct CreationStyle{int x,y;u8 scale,padding[3];};
 struct SusamuneWallkickStyleCfg{int x,y;u8 scale,padding[3],rgb[7][3];};
-char drawnText[80];unsigned drawnColor;
+char drawnText[80];unsigned drawnColor,drawnDisplay;
 struct CreationExtras{
- void stageWallkickInto(SusamuneWallkickStyleCfg*c){
-  c->x=c->y=0;c->scale=100;for(unsigned i=0;i<7;i++)c->rgb[i][0]=i;}
+ void drawPracticeDisplay(Menu*,const char*text,unsigned display,int color){
+  unsigned i=0;while(text[i]){drawnText[i]=text[i];++i;}drawnText[i]=0;
+  drawnColor=color;drawnDisplay=display;}
 } gCreationExtras;
 namespace JapaneseUi {const char *text(const char*s){return s;}}
 namespace Creation {
@@ -149,6 +150,7 @@ API unsigned graphicsPassed(){return lastGraphics==&graphics;}
 API void setFormatter(void*p){snprintf=(decltype(snprintf))p;}
 API const char *drawResult(){Menu menu;drawnText[0]=0;MovementTimingDisplay::draw(&menu);return drawnText;}
 API unsigned color(){return drawnColor;}
+API unsigned display(){return drawnDisplay;}
 API void conflictingHook(){marioTimingVtable[8]=0;MovementTimingDisplay::onStageSetup();}
 API unsigned hookReady(){return MovementTimingDisplay::sHookReady;}
 API unsigned slotUntouched(){return marioTimingVtable[8]==0;}
@@ -473,6 +475,29 @@ API unsigned retailReady(unsigned back,unsigned timer,unsigned mode,unsigned inp
             self.lib.init();self.lib.enable(0,setting);self.lib.landAtQuarter(1)
             self.lib.jumpAtPhase(2)
             self.assertEqual(self.lib.shown(),frames)
+
+    def test_live_feedback_selects_independent_style_and_target_color(self):
+        self.lib.enable(0, 1)
+        self.lib.landAtQuarter(1)
+        self.lib.jumpAtPhase(2)
+        self.lib.drawResult()
+        self.assertEqual((self.lib.display(), self.lib.color()), (1, 0))
+        for frames, color in ((8, 0), (9, 1), (10, 2)):
+            self.lib.init()
+            self.jump(frames)
+            self.tick(after=DIVE, pressed=B)
+            self.lib.drawResult()
+            self.assertEqual((self.lib.display(), self.lib.color()), (0, color))
+        self.lib.init()
+        self.jump(9)
+        self.tick(after=DIVE, pressed=B, y=405)
+        self.lib.drawResult()
+        self.assertEqual((self.lib.display(), self.lib.color()), (0, 3))
+        self.lib.enable(0, 2)
+        for mode, color in ((0, 1), (1, 0)):
+            self.lib.slide(0x00840452, 21, mode, 0)
+            self.lib.drawResult()
+            self.assertEqual((self.lib.display(), self.lib.color()), (2, color))
 
     def test_guarded_nonmovement_calls_still_forward_once_unchanged(self):
         for guard in range(5):

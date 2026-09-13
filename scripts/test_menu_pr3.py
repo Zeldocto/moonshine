@@ -328,9 +328,10 @@ class MovementStylePersistenceContracts(unittest.TestCase):
         self.assertIn("gCreationExtras.stageMovementInto(&cfg->movementStyle)", settings)
         self.assertIn("DCStoreRange((void *)&cfg->movementStyle", settings)
 
-    def test_dolphin_v5_migrates_to_v10(self) -> None:
+    def test_dolphin_v5_migrates_to_v11(self) -> None:
         emulator = text("src/emulator_persistence.cpp")
-        self.assertIn("constexpr u16 kRecordVersion = 10;", emulator)
+        self.assertIn("constexpr u16 kRecordVersion = 11;", emulator)
+        self.assertIn("const bool v10 = !current && validV10(record);", emulator)
         self.assertIn("const bool v9 = !current && validV9(record);", emulator)
         self.assertIn("initILEpisodes(&sState->ilEpisodes);", emulator)
         self.assertIn("struct RecordV5", emulator)

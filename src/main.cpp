@@ -383,7 +383,7 @@ extern "C" s32 onUpdate(JDrama::TDirector* director) {
     const bool sessionBlocksNewInput = sessionModalBeforeDirect ||
         (sessionResultBeforeDirect &&
          !menuOpenBeforeDirect && !wheelOwnsInputBeforeDirect);
-    if (sessionResultBeforeDirect) {
+    if (sessionResultBeforeDirect || menuOwnsRetailPad) {
         WarpWheel::suppressClassicInstantUntilRelease();
     }
     if (sessionBlocksNewInput) gBinds.suppressUntilRelease();
@@ -446,7 +446,8 @@ extern "C" s32 onUpdate(JDrama::TDirector* director) {
         (!gSettings.getBool(SETTING_DISABLE_WARPS) ||
          wheelOpenBeforeDirect || WarpWheel::promptPending()))
         WarpWheel::update(gpApplication.mGamePads[0]);
-    PatternSelector::update(!creationEditing && !sessionResultBeforeDirect && !stateDiskBusy);
+    PatternSelector::update(!menuOwnsRetailPad && !creationEditing &&
+                            !sessionResultBeforeDirect && !stateDiskBusy);
     PracticeVisuals::update();
     rngControlApply();
 

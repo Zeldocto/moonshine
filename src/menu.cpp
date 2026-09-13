@@ -3446,8 +3446,8 @@ const char *settingHelp(SettingId id) {
     case SETTING_GELATO_RED_COIN_FISH_PATTERN: return "Selects a repeatable Gelato 6 fish pattern.";
     case SETTING_GELATO_BLUE_BIRD_PATTERN: return "Selects a repeatable blue-bird pattern.";
     case SETTING_WALLKICK_DISPLAY: return "Shows the timing of Mario's last wall kick.";
-    case SETTING_GB_SKIP_DISPLAY: return "B timing after a full A jump: target 9f, Y404, V6. Uses wallkick layout.";
-    case SETTING_JUMP_DISPLAY: return "Landing jump timing, buttslide jump readiness, or both. Uses wallkick layout.";
+    case SETTING_GB_SKIP_DISPLAY: return "B timing after a full A jump: target 9f, Y404, V6. Edit its style below.";
+    case SETTING_JUMP_DISPLAY: return "Landing jump timing, buttslide jump readiness, or both. Edit each style below.";
     case SETTING_ROLLOUT_DISPLAY: return "Shows the effective A-hold frames of a rollout.";
     case SETTING_DUST_DISPLAY: return "Shows frames from landing until the rollout input.";
     case SETTING_SHOW_BGM_SLOTS: return "Shows free music slots for audio diagnostics.";
@@ -3577,7 +3577,8 @@ public:
                     const int editor = mSel - settings;
                     if (editor == 0) gCreationExtras.beginWallkickEditor();
                     else if (editor == 1) gCreationExtras.beginRolloutEditor();
-                    else gCreationExtras.beginDustEditor();
+                    else if (editor == 2) gCreationExtras.beginDustEditor();
+                    else gCreationExtras.beginPracticeDisplayEditor(editor - 3);
                 }
                 else if (hasFactoryReset())
                     mMode = mSel == settings ? 1 : 3;
@@ -3749,7 +3750,7 @@ private:
     }
     bool hasFactoryReset() const { return mCat == SETTING_CAT_MISC; }
     int extraRows() const {
-        return (hasFactoryReset() || hasMarioColorsEditor()) ? 2 : hasMovementEditors() ? 3
+        return (hasFactoryReset() || hasMarioColorsEditor()) ? 2 : hasMovementEditors() ? 6
              : (hasFeedbackEditor() || hasNativeTimerEditor()) ? 1 : 0;
     }
 
@@ -3773,7 +3774,8 @@ private:
     const char *movementEditorName(int editor) const {
         return editor == 0 ? "Wallkick display style"
              : editor == 1 ? "Rollout display style"
-                           : "Dust display style";
+             : editor == 2 ? "Dust display style"
+                           : practiceDisplayName(editor - 3);
     }
 
     const char *pageRootSection(int page) const {
@@ -3931,7 +3933,7 @@ public:
     const char *summary() const override { return "Save and switch between five named layouts."; }
     bool available() const override { return !rngControlInvalidatesIl(); }
     bool grabsInput() const override {
-        return mMode && !gBinds.wasPressedRaw(BIND_MENU_TOGGLE);
+        return mMode != 0;
     }
     bool suppressesBinds() const override { return true; }
     bool fullScreen() const override { return mMode != 0; }
@@ -4162,6 +4164,9 @@ private:
         ROW_AIR_EDITOR,
         ROW_EXTRAS_END = ROW_EXTRAS_FIRST + CreationExtras::MENU_ROW_COUNT + 2,
         ROW_WALLKICK_EDITOR = ROW_EXTRAS_END,
+        ROW_GB_TIMING_EDITOR,
+        ROW_JUMP_TIMING_EDITOR,
+        ROW_BUTTSLIDE_EDITOR,
         ROW_ROLLOUT_EDITOR,
         ROW_DUST_EDITOR,
         ROW_SAVESTATE_EDITOR,
@@ -4219,6 +4224,8 @@ private:
             gCreationExtras.beginHealthEditor(mSel == ROW_AIR_EDITOR);
         } else if (mSel == ROW_WALLKICK_EDITOR) {
             gCreationExtras.beginWallkickEditor();
+        } else if (mSel >= ROW_GB_TIMING_EDITOR && mSel <= ROW_BUTTSLIDE_EDITOR) {
+            gCreationExtras.beginPracticeDisplayEditor(mSel - ROW_GB_TIMING_EDITOR);
         } else if (mSel == ROW_ROLLOUT_EDITOR) {
             gCreationExtras.beginRolloutEditor();
         } else if (mSel == ROW_DUST_EDITOR) {
@@ -4239,6 +4246,8 @@ private:
         if (row == ROW_AIR_EDITOR) return "Underwater air colour";
         if (row == ROW_GHOST_INPUTS) return Settings::name(SETTING_GHOST_INPUTS);
         if (row == ROW_WALLKICK_EDITOR) return "Wallkick display";
+        if (row >= ROW_GB_TIMING_EDITOR && row <= ROW_BUTTSLIDE_EDITOR)
+            return practiceDisplayName(row - ROW_GB_TIMING_EDITOR);
         if (row == ROW_ROLLOUT_EDITOR) return "Rollout display";
         if (row == ROW_DUST_EDITOR) return "Dust display";
         if (row == ROW_SAVESTATE_EDITOR) return "Savestate feedback";
@@ -6641,6 +6650,10 @@ void Menu::hide() {
 }
 
 void Menu::pollSettingsSave() {
+    // Polling can restage an acknowledged save or retry. Keep editor previews
+    // out of that snapshot until Keep or Cancel releases input.
+    if (mShown && mTabs[mCurTab]->grabsInput()) return;
+
     SettingsSaveState st = gSettings.pollSave();
     if (!mSaveWatch) {
         return;

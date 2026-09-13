@@ -79,7 +79,7 @@ API void reset(){
 }
 API void request(u32 op,u32 slot,u32 gen){mailbox.requestSeq++;mailbox.operation=op;mailbox.slot=slot;mailbox.expectedGeneration=gen;}
 API void prepare(u32 value,const char*name){
- MoonshineLayoutFile*r=&mailbox.file;memset(r,0,sizeof(*r));r->magic=MOONSHINE_LAYOUT_MAGIC;r->version=1;r->bytes=sizeof(*r);
+ MoonshineLayoutFile*r=&mailbox.file;memset(r,0,sizeof(*r));r->magic=MOONSHINE_LAYOUT_MAGIC;r->version=MOONSHINE_LAYOUT_VERSION;r->bytes=sizeof(*r);
  r->generation=mailbox.expectedGeneration+1;if(!r->generation)r->generation=1;
  for(unsigned i=0;i<15&&name[i];i++)r->name[i]=name[i];memset(&r->layout,value,sizeof(r->layout));r->checksum=MoonshineLayoutChecksum(r);
 }
@@ -92,7 +92,7 @@ API const void*payload(){return &mailbox.file.layout;}
 API const void*disk(u32 i){return exists[i]?card[i]:0;}
 API void corrupt(u32 i,u32 copy){card[i][copy*8192+100]^=1;}
 API void recycle(){memcpy(stale,card[0],8192);MoonshineLayoutFile*r=(MoonshineLayoutFile*)stale;r->generation=999;r->checksum=MoonshineLayoutChecksum(r);}
-API void reboot(){memset(&mailbox,0,sizeof(mailbox));mailbox.magic=MOONSHINE_LAYOUT_MAILBOX_MAGIC;mailbox.version=1;state.idleObserved=false;}
+API void reboot(){memset(&mailbox,0,sizeof(mailbox));mailbox.magic=MOONSHINE_LAYOUT_MAILBOX_MAGIC;mailbox.version=MOONSHINE_LAYOUT_MAILBOX_VERSION;state.idleObserved=false;}
 API void faults(u32 rd,u32 wr,u32 close,u32 corrupt){cardReads=cardWrites=0;failRead=rd;shortWrite=wr;failClose=close;corruptReadback=corrupt;}
 API void block(u32 status,u32 lock){manager.mLastStatus=(s32)status;managerLocked=lock;}
 API s32 gameStatus(){return manager.mLastStatus;}
@@ -106,6 +106,39 @@ API void publicationFailure(u32 fail){failPublish=fail;}
 API u32 bad(){return mailbox.badMask;}
 API u32 present(){return mailbox.presentMask;}
 API void interruptedCreate(u32 slot){CARDFileInfo file;char name[]="moonshine_layout_1";name[sizeof(name)-2]=(char)('1'+slot);CARDCreate(CARD_SLOTB,name,16384,&file);}
+API void legacy(u32 slot,u32 generation){
+ exists[slot]=true;comment[slot]=kSectorSize-64u;memset(card[slot],0xa5,16384);
+ MoonshineLayoutFile*r=(MoonshineLayoutFile*)card[slot];memset(r,0,MOONSHINE_LAYOUT_V1_FILE_SIZE);
+ r->magic=MOONSHINE_LAYOUT_MAGIC;r->version=1;r->bytes=MOONSHINE_LAYOUT_V1_FILE_SIZE;
+ r->generation=generation;memcpy(r->name,"Old layout",11);r->layout.settings[0]=73;
+ SusamuneWallkickStyleCfg &style=r->layout.wallkick;
+ style.magic=SUSAMUNE_WALLKICK_STYLE_MAGIC;style.version=SUSAMUNE_WALLKICK_STYLE_VERSION;
+ style.x=112;style.y=210;style.scale=155;style.textA=177;style.bgA=91;
+ for(u32 i=0;i<sizeof(style.rgb);++i)((u8*)style.rgb)[i]=(u8)(30+i);
+ r->checksum=MoonshineLayoutChecksum(r);
+}
+API u32 upgraded(){
+ if(mailbox.file.version!=MOONSHINE_LAYOUT_VERSION||mailbox.file.bytes!=sizeof(mailbox.file)||
+    !MoonshineLayoutValid(&mailbox.file)||mailbox.file.layout.settings[0]!=73)return 0;
+ SusamunePracticeDisplayStyleCfg expected;
+ SusamunePracticeDisplayStyleFromWallkick(&expected,&mailbox.file.layout.wallkick);
+ for(u32 i=0;i<sizeof(expected);++i)
+  if(((u8*)&expected)[i]!=((u8*)&mailbox.file.layout.practiceDisplays)[i])return 0;
+ return 1;
+}
+API void legacyRequest(){mailbox.file.version=1;mailbox.file.bytes=MOONSHINE_LAYOUT_V1_FILE_SIZE;mailbox.file.checksum=MoonshineLayoutChecksum(&mailbox.file);}
+API void oldMailbox(){mailbox.version=1;}
+API void prepareStyles(){
+ SusamunePracticeDisplayStyleInit(&mailbox.file.layout.practiceDisplays);
+ for(u32 i=0;i<3;++i){auto &s=mailbox.file.layout.practiceDisplays.entries[i];s.x=90+i*100;s.y=40+i*35;s.rgb[6][2]=91+i;}
+ mailbox.file.checksum=MoonshineLayoutChecksum(&mailbox.file);
+}
+API u32 styles(){
+ const SusamunePracticeDisplayStyleCfg &cfg=mailbox.file.layout.practiceDisplays;
+ if(cfg.magic!=SUSAMUNE_PRACTICE_DISPLAY_STYLE_MAGIC)return 0;
+ for(u32 i=0;i<3;++i)if(cfg.entries[i].x!=90+i*100||cfg.entries[i].y!=40+i*35||cfg.entries[i].rgb[6][2]!=91+i)return 0;
+ return 1;
+}
 '''
 
 
@@ -268,6 +301,51 @@ class LayoutProfileCardTests(unittest.TestCase):
             self.assertEqual(self.finish(), INVALID)
             self.assertFalse(self.lib.disk(0))
         self.assertEqual(self.command(3, 5, 0), INVALID)
+
+    def test_legacy_profile_upgrades_only_checked_transfer_copy_without_card_writes(self):
+        self.lib.legacy(0, 12)
+        original = C.string_at(self.lib.disk(0), 16384)
+        self.assertEqual(self.command(1), 0)
+        self.assertEqual(self.lib.name(0), b'Old layout')
+        self.assertEqual(self.lib.generation(0), 12)
+        self.assertEqual(self.command(3), 0)
+        self.assertEqual(self.lib.upgraded(), 1)
+        self.assertEqual(C.string_at(self.lib.disk(0), 16384), original)
+        self.assertEqual(self.lib.writes(), 0)
+
+    def test_new_style_payload_roundtrips_and_old_sector_survives_replacement(self):
+        self.lib.legacy(0, 12)
+        old = C.string_at(self.lib.disk(0), 8192)
+        self.assertEqual(self.command(1), 0)
+        self.lib.request(2, 0, 12)
+        self.lib.prepare(11, b'New styles')
+        self.lib.prepareStyles()
+        self.assertEqual(self.finish(), 0)
+        self.assertEqual(C.string_at(self.lib.disk(0), 8192), old)
+        self.lib.reboot()
+        self.assertEqual(self.command(1), 0)
+        self.assertEqual(self.lib.generation(0), 13)
+        self.assertEqual(self.command(3), 0)
+        self.assertEqual(self.lib.styles(), 1)
+        self.lib.corrupt(0, 1)
+        self.lib.reboot()
+        self.assertEqual(self.command(1), 0)
+        self.assertEqual(self.lib.generation(0), 12)
+        self.assertEqual(self.command(3), 0)
+        self.assertEqual(self.lib.upgraded(), 1)
+
+    def test_legacy_file_can_be_read_but_not_submitted_as_a_new_save(self):
+        self.lib.request(2, 0, 0)
+        self.lib.prepare(11, b'Old request')
+        self.lib.legacyRequest()
+        self.assertEqual(self.finish(), INVALID)
+        self.assertFalse(self.lib.disk(0))
+        self.assertEqual(self.lib.writes(), 0)
+
+    def test_old_mailbox_is_rejected_before_any_card_write(self):
+        self.lib.oldMailbox()
+        self.assertEqual(self.command(1), INVALID)
+        self.assertEqual(self.lib.writes(), 0)
 
 
 if __name__ == '__main__':

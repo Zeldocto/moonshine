@@ -12,11 +12,11 @@
 - **Jump display** shows **1f–6f**, then **Late**, from your most recent landing to your next jump. The takeoff's quarter-frame phase stays alongside it: for example, `Jump: 1f QF2`.
 - Choose **Buttslide** to see when a jump is ready during a buttslide, or **Both** for both jump displays. The cue follows the game's jump rules, including the surface and slide state.
 - **GB skip timing** checks the B press after an ordinary full A jump. It reports Early, On time, Late or Check jump, with the airborne frame count, height and vertical speed. The supplied target is 9 frames, Y404 and vertical speed 6. It does not check horizontal position or prove that the skip succeeded.
-- Both displays are optional, under **Display > HUD and displays > Movement displays**. They use the wallkick display's position, size and colours.
+- Both displays are optional, under **Display > HUD and displays > Movement displays**. Their Edit rows, also in Layout editor > Practice feedback, give GB, Jump and Buttslide independent position, size, opacity, background and colour controls.
 
 ## Five named layout profiles
 
-- **Display > Layout profiles** stores five layouts for each game region. Give each one a name, press **Y** to save the current layout, or **A** to apply a saved profile. Replacing a saved profile asks first.
+- **Display > Layout profiles** stores five layouts for each game region. Give each one a name, press **Y** to save the current layout, or **A** to apply a saved profile. Replacing a saved profile asks first. Name entry keeps D-pad and typing buttons separate from Menu Close and practice shortcuts; Start saves and X+Start cancels.
 - Profiles include your overlays, custom text, timer and menu styles, Mario/FLUDD colours and visual options. Button binds, practice rules and records are separate.
 - Launcher profiles survive reboot in **Moonshine data/layouts**. Dolphin stores them on its Slot B memory card alongside the existing settings system.
 

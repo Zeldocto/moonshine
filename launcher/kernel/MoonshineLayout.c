@@ -128,11 +128,11 @@ void MoonshineLayoutService(void)
         else { Opened = true; Phase = SCAN_READ; }
         return;
     case SCAN_READ:
-        if (f_size(&File) != sizeof(Buffer)) InvalidCopy = true;
+        if (f_size(&File) != sizeof(Buffer) && f_size(&File) != MOONSHINE_LAYOUT_V1_FILE_SIZE) InvalidCopy = true;
         else {
-            result = f_read(&File, &Buffer, sizeof(Buffer), &done);
-            if (result != FR_OK || done != sizeof(Buffer)) ScanError = result ? result : FR_DISK_ERR;
-            else if (!MoonshineLayoutValid(&Buffer)) InvalidCopy = true;
+            result = f_read(&File, &Buffer, f_size(&File), &done);
+            if (result != FR_OK || done != f_size(&File)) ScanError = result ? result : FR_DISK_ERR;
+            else if (Buffer.bytes != done || !MoonshineLayoutValid(&Buffer)) InvalidCopy = true;
             else if (!BestGeneration || (s32)(Buffer.generation - BestGeneration) > 0) {
                 BestGeneration = Buffer.generation;
                 BestCopy = Copy;
@@ -167,7 +167,8 @@ void MoonshineLayoutService(void)
         memcpy(&Buffer, &m->file, sizeof(Buffer));
         generation = BestGeneration + 1u;
         if (!generation) generation = 1u;
-        if (!MoonshineLayoutValid(&Buffer) || Buffer.generation != generation) {
+        if (!MoonshineLayoutValid(&Buffer) || Buffer.version != MOONSHINE_LAYOUT_VERSION ||
+            Buffer.bytes != sizeof(Buffer) || Buffer.generation != generation) {
             Finish(MOONSHINE_LAYOUT_ERROR_INVALID); return;
         }
         Buffer.checksum = MoonshineLayoutChecksum(&Buffer);
@@ -205,10 +206,10 @@ void MoonshineLayoutService(void)
         return;
     case LOAD_READ:
     case VERIFY_READ:
-        if (f_size(&File) != sizeof(Buffer)) { Finish(MOONSHINE_LAYOUT_ERROR_INVALID); return; }
-        result = f_read(&File, &Buffer, sizeof(Buffer), &done);
-        if (result != FR_OK || done != sizeof(Buffer)) { Finish(result ? result : FR_DISK_ERR); return; }
-        status = MoonshineLayoutValid(&Buffer) ? 0u : MOONSHINE_LAYOUT_ERROR_INVALID;
+        if (f_size(&File) != sizeof(Buffer) && f_size(&File) != MOONSHINE_LAYOUT_V1_FILE_SIZE) { Finish(MOONSHINE_LAYOUT_ERROR_INVALID); return; }
+        result = f_read(&File, &Buffer, f_size(&File), &done);
+        if (result != FR_OK || done != f_size(&File)) { Finish(result ? result : FR_DISK_ERR); return; }
+        status = Buffer.bytes == done && MoonshineLayoutValid(&Buffer) ? 0u : MOONSHINE_LAYOUT_ERROR_INVALID;
         generation = Phase == LOAD_READ ? BestGeneration : ExpectedGeneration;
         if (!status && (Buffer.generation != generation ||
             (Phase == VERIFY_READ && Buffer.checksum != ExpectedChecksum))) status = MOONSHINE_LAYOUT_ERROR_CHANGED;
@@ -219,6 +220,7 @@ void MoonshineLayoutService(void)
     case VERIFY_CLOSE:
         result = f_close(&File); Opened = false;
         if (result != FR_OK) { Finish(result); return; }
+        MoonshineLayoutUpgrade(&Buffer);
         memcpy(&m->file, &Buffer, sizeof(Buffer));
         BestGeneration = Buffer.generation;
         memcpy(BestName, Buffer.name, sizeof(BestName));

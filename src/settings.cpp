@@ -339,6 +339,8 @@ void Settings::save() {
         DCStoreRange(SUSAMUNE_FLUDD_COLORS_LIVE_PTR, sizeof(SusamuneFluddColorsCfg));
     if (cfg->flags & SUSAMUNE_CFG_FLAG_IL_EPISODES)
         DCStoreRange(SUSAMUNE_IL_EPISODES_LIVE_PTR, sizeof(SusamuneILEpisodesCfg));
+    if (cfg->flags & SUSAMUNE_CFG_FLAG_PRACTICE_DISPLAY_STYLE)
+        DCStoreRange(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR, sizeof(SusamunePracticeDisplayStyleCfg));
 
     mSaveSeq     = cfg->saveSeq + 1;
     cfg->saveSeq = mSaveSeq;
@@ -487,6 +489,13 @@ void Settings::adopt(const volatile SusamuneCfg *cfg) {
         ILing::adoptEpisodes(SUSAMUNE_IL_EPISODES_LIVE_PTR);
     }
 
+    if (cfg->flags & SUSAMUNE_CFG_FLAG_PRACTICE_DISPLAY_STYLE) {
+#if !IS_EMULATOR
+        DCInvalidateRange(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR, sizeof(SusamunePracticeDisplayStyleCfg));
+#endif
+        gCreationExtras.adoptPracticeDisplays(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR);
+    }
+
     // set() marks dirty; adopting persisted values is not a user edit.
     mDirty     = false;
     mSaveState = SETTINGS_SAVE_IDLE;
@@ -520,6 +529,8 @@ void Settings::stageInto(volatile SusamuneCfg *cfg) {
         FluddColors::stageInto(SUSAMUNE_FLUDD_COLORS_LIVE_PTR);
     if (cfg->flags & SUSAMUNE_CFG_FLAG_IL_EPISODES)
         ILing::stageEpisodes(SUSAMUNE_IL_EPISODES_LIVE_PTR);
+    if (cfg->flags & SUSAMUNE_CFG_FLAG_PRACTICE_DISPLAY_STYLE)
+        gCreationExtras.stagePracticeDisplaysInto(SUSAMUNE_PRACTICE_DISPLAY_STYLE_LIVE_PTR);
     MarioColors::clearDirty();
     FluddColors::clearDirty();
 }

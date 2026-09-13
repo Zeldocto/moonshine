@@ -105,6 +105,7 @@ void capture(MoonshineLayoutPayload *out) {
     gCreationExtras.stageNativeTimerInto(&out->nativeTimer);
     MarioColors::stageInto(&out->mario);
     FluddColors::stageInto(&out->fludd);
+    gCreationExtras.stagePracticeDisplaysInto(&out->practiceDisplays);
 }
 
 bool apply(const MoonshineLayoutPayload &layout) {
@@ -137,6 +138,7 @@ bool apply(const MoonshineLayoutPayload &layout) {
     gCreationExtras.adoptNativeTimer(&layout.nativeTimer);
     MarioColors::adopt(&layout.mario);
     FluddColors::adopt(&layout.fludd);
+    gCreationExtras.adoptPracticeDisplays(&layout.practiceDisplays);
     gSettings.markDirty();
     if (gMenu) gMenu->scheduleSettingsSave();
     return true;

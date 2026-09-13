@@ -3,6 +3,7 @@
 
 #include "susamune/creation.hxx"
 #include "susamune/susamune_cfg.h"
+#include "susamune/practice_display_style.h"
 
 class J2DPicture;
 class J2DPane;
@@ -20,6 +21,7 @@ bool updateCreationKeyboardText(TMarioGamePad *pad, char *text, u8 &length,
                                 u8 capacity, u8 &page, bool &uppercase,
                                 u8 &cursor);
 const char *wallkickDisplayLabel(int index);
+const char *practiceDisplayName(unsigned display);
 
 class CreationExtras {
 public:
@@ -36,6 +38,8 @@ public:
     void stageWallkickInto(volatile SusamuneWallkickStyleCfg *dst) const;
     void adoptMovement(const volatile SusamuneMovementStyleCfg *src);
     void stageMovementInto(volatile SusamuneMovementStyleCfg *dst) const;
+    void adoptPracticeDisplays(const volatile SusamunePracticeDisplayStyleCfg *src);
+    void stagePracticeDisplaysInto(volatile SusamunePracticeDisplayStyleCfg *dst) const;
     void adoptNativeTimer(const volatile SusamuneNativeTimerStyleCfg *src);
     void stageNativeTimerInto(volatile SusamuneNativeTimerStyleCfg *dst) const;
 
@@ -61,6 +65,7 @@ public:
     void beginWallkickEditor();
     void beginRolloutEditor();
     void beginDustEditor();
+    void beginPracticeDisplayEditor(unsigned display);
     void beginAchievementBannerEditor();
     void beginToastEditor();
     void beginPbBannerEditor();
@@ -86,6 +91,8 @@ public:
                              int color) const;
     void drawRolloutDisplay(Menu *menu, const char *message, int color) const;
     void drawDustDisplay(Menu *menu, const char *message, int color) const;
+    void drawPracticeDisplay(Menu *menu, const char *message, unsigned display,
+                             int color) const;
     void drawToast(Menu *menu, const char *message) const;
     void drawPbBanner(Menu *menu, const char *message) const;
     void drawStageSessionCounter(Menu *menu, const char *message) const;
@@ -121,10 +128,12 @@ private:
         EDIT_STAGE_SESSION,
         EDIT_NATIVE_TIMER,
         EDIT_HEALTH,
+        EDIT_PRACTICE_DISPLAY,
     };
 
     static CreationStyle defaultWordStyle(int index);
     static CreationStyle defaultWallkickStyle();
+    void beginOverlayEditor(EditMode mode, unsigned display = 0);
     void beginWordEditor(int index);
     void beginStageSessionEditor();
     void beginKeyboard(int index);
@@ -151,20 +160,19 @@ private:
     u8 mHealthRgb[2][3];
     u8 mColors[SUSAMUNE_CREATION_COLOR_COUNT][3];
     u8 mDefaultColors[SUSAMUNE_CREATION_COLOR_COUNT][3];
-    u8 mColorBackup[SUSAMUNE_CREATION_COLOR_COUNT][3];
+    // Editors are exclusive. Native timer uses three disjoint 15-colour slices.
+    union {
+        u8 mColorBackup[SUSAMUNE_CREATION_COLOR_COUNT][3];
+        u8 mWordBackup[45][3];
+    };
     u8 mWordRgb[SUSAMUNE_CREATION_WORD_COUNT]
                [SUSAMUNE_CREATION_WORD_CHARS][3];
-    u8 mWordBackup[SUSAMUNE_CREATION_WORD_CHARS][3];
     u8 mRecentIlRgb[1][3];
-    u8 mRecentIlBackup[1][3];
     u8 mSavestateFeedbackRgb[1][3];
-    u8 mSavestateFeedbackBackup[1][3];
     u8 mWallkickRgb[SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT][3];
-    u8 mWallkickBackup[SUSAMUNE_WALLKICK_STYLE_COLOR_COUNT][3];
     u8 mRolloutRgb[SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT][3];
-    u8 mRolloutBackup[SUSAMUNE_ROLLOUT_STYLE_COLOR_COUNT][3];
     u8 mDustRgb[SUSAMUNE_DUST_STYLE_COLOR_COUNT][3];
-    u8 mDustBackup[SUSAMUNE_DUST_STYLE_COLOR_COUNT][3];
+    SusamunePracticeDisplayStyle mPracticeDisplays[3];
     char mWords[SUSAMUNE_CREATION_WORD_COUNT]
                [SUSAMUNE_CREATION_WORD_TEXT_SIZE];
     char mTextBackup[SUSAMUNE_CREATION_WORD_TEXT_SIZE];

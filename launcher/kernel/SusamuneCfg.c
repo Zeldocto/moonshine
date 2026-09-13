@@ -5540,6 +5540,39 @@ static void ApplyMovementStyleKey(struct SusamuneMovementStyleCfg *cfg,
 	                             SUSAMUNE_DUST_STYLE_COLOR_COUNT);
 }
 
+static const char *const PracticeDisplayKeys[SUSAMUNE_PRACTICE_DISPLAY_COUNT] = {
+	"gb_timing", "jump_timing", "buttslide"
+};
+
+static u8 ApplyPracticeDisplayStyleKey(const char *key, const char *text)
+{
+	u32 i;
+	for (i = 0; i < SUSAMUNE_PRACTICE_DISPLAY_COUNT; ++i) {
+		const char *prefix = PracticeDisplayKeys[i];
+		const u32 length = strlen(prefix);
+		struct SusamuneMovementOverlayStyleCfg style;
+		struct SusamunePracticeDisplayStyle *target = &SUSAMUNE_PRACTICE_DISPLAY_STYLE_PHYS_PTR->entries[i];
+		if (strncmp(key, prefix, length) || key[length] != '_') continue;
+		memset(&style, 0, sizeof(style));
+		memcpy(&style, target, sizeof(*target));
+		ApplyMovementOverlayStyleKey(&style, prefix, key, text, SUSAMUNE_PRACTICE_DISPLAY_COLOR_COUNT);
+		memcpy(target, &style, sizeof(*target));
+		return 1u << i;
+	}
+	return 0;
+}
+
+static void InheritPracticeDisplayStyles(const struct SusamuneWallkickStyleCfg *wallkick, u8 present)
+{
+	struct SusamunePracticeDisplayStyleCfg inherited;
+	u32 i;
+	if (present == (1u << SUSAMUNE_PRACTICE_DISPLAY_COUNT) - 1u) return;
+	SusamunePracticeDisplayStyleFromWallkick(&inherited, wallkick);
+	for (i = 0; i < SUSAMUNE_PRACTICE_DISPLAY_COUNT; ++i)
+		if (!(present & (1u << i)))
+			memcpy(&SUSAMUNE_PRACTICE_DISPLAY_STYLE_PHYS_PTR->entries[i], &inherited.entries[i], sizeof(inherited.entries[i]));
+}
+
 static bool ParseNativeTimerOffset(const char *text, u16 bias, u16 *out)
 {
 	u16 magnitude;
@@ -5672,6 +5705,7 @@ static void ParseIni(char *text, struct SusamuneCfg *cfg)
 	enum IniSection section = SECTION_OTHER;
 	u8 marioEnabled = 0xff;
 	u16 fluddEnabled = 0xffff;
+	u8 practiceStylesPresent = 0;
 
 	SawSettingsSection = false;
 
@@ -5753,6 +5787,7 @@ static void ParseIni(char *text, struct SusamuneCfg *cfg)
 			ApplyCreationKey(&cfg->creation, Trim(line), Trim(eq + 1));
 			ApplyWallkickStyleKey(&cfg->wallkickStyle, Trim(line), Trim(eq + 1));
 			ApplyMovementStyleKey(&cfg->movementStyle, Trim(line), Trim(eq + 1));
+			practiceStylesPresent |= ApplyPracticeDisplayStyleKey(Trim(line), Trim(eq + 1));
 			ApplyNativeTimerStyleKey(&cfg->nativeTimerStyle, Trim(line), Trim(eq + 1));
 			ApplyNativeTimerModesKey(&cfg->wallkickStyle, Trim(line), Trim(eq + 1));
 			ApplyMarioColorsKey(MarioColorsBlock(), Trim(line), Trim(eq + 1), &marioEnabled);
@@ -5762,6 +5797,7 @@ static void ParseIni(char *text, struct SusamuneCfg *cfg)
 
 		line = next;
 	}
+	InheritPracticeDisplayStyles(&cfg->wallkickStyle, practiceStylesPresent);
 }
 
 // ---------------------------------------------------------------------
@@ -6094,6 +6130,21 @@ static void EmitMovementOverlayStyle(
 			style->rgb[i][0], style->rgb[i][1], style->rgb[i][2]));
 }
 
+static void EmitPracticeDisplayStyles(FIL *f, int *err)
+{
+	const struct SusamunePracticeDisplayStyleCfg *cfg = SUSAMUNE_PRACTICE_DISPLAY_STYLE_PHYS_PTR;
+	u32 i;
+	if (cfg->magic != SUSAMUNE_PRACTICE_DISPLAY_STYLE_MAGIC ||
+	    cfg->version != SUSAMUNE_PRACTICE_DISPLAY_STYLE_VERSION ||
+	    cfg->count != SUSAMUNE_PRACTICE_DISPLAY_COUNT) return;
+	for (i = 0; i < SUSAMUNE_PRACTICE_DISPLAY_COUNT; ++i) {
+		struct SusamuneMovementOverlayStyleCfg style;
+		memset(&style, 0, sizeof(style));
+		memcpy(&style, &cfg->entries[i], sizeof(cfg->entries[i]));
+		EmitMovementOverlayStyle(f, err, PracticeDisplayKeys[i], &style, SUSAMUNE_PRACTICE_DISPLAY_COLOR_COUNT);
+	}
+}
+
 static void EmitNativeTimerStyle(FIL *f, int *err,
 	                             const struct SusamuneNativeTimerStyleCfg *cfg)
 {
@@ -6302,6 +6353,7 @@ static void EmitCreationSection(FIL *f, int *err,
 	EmitMarioColors(f, err, MarioColorsBlock());
 	EmitFluddColors(f, err, FluddColorsBlock());
 	EmitILEpisodes(f, err);
+	EmitPracticeDisplayStyles(f, err);
 	if (cfg->wallkickStyle.nativeTimerModesMagic == SUSAMUNE_NATIVE_TIMER_MODES_MAGIC)
 		Emit(f, err, line, (u32)_sprintf(line, "native_timer_custom_mask = %u\r\n",
 		     (((u32)cfg->wallkickStyle.nativeTimerCustomMask[0] << 8) |
@@ -6843,6 +6895,7 @@ void SusamuneCfgInit(void)
 	SUSAMUNE_IL_EPISODES_PHYS_PTR->magic = SUSAMUNE_IL_EPISODE_MAGIC;
 	SUSAMUNE_IL_EPISODES_PHYS_PTR->version = SUSAMUNE_IL_EPISODE_VERSION;
 	SUSAMUNE_IL_EPISODES_PHYS_PTR->count = SUSAMUNE_IL_EPISODE_COUNT;
+	SusamunePracticeDisplayStyleInit(SUSAMUNE_PRACTICE_DISPLAY_STYLE_PHYS_PTR);
 
 	cfg->magic     = SUSAMUNE_CFG_MAGIC;
 	cfg->version   = SUSAMUNE_CFG_VERSION;
@@ -6860,6 +6913,7 @@ void SusamuneCfgInit(void)
 	                 SUSAMUNE_CFG_FLAG_MARIO_COLORS |
 	                 SUSAMUNE_CFG_FLAG_FLUDD_COLORS |
 	                 SUSAMUNE_CFG_FLAG_IL_EPISODES |
+	                 SUSAMUNE_CFG_FLAG_PRACTICE_DISPLAY_STYLE |
 	                 SUSAMUNE_CFG_FLAG_STATE_POOL_EXPANSION |
 	                 SUSAMUNE_CFG_FLAG_STATE_CODEC_RELOCATED |
 	                 MOONSHINE_LAYOUT_CFG_FLAG;
@@ -6954,6 +7008,7 @@ void SusamuneCfgInit(void)
 	sync_after_write(marioColors, sizeof(*marioColors));
 	sync_after_write(fluddColors, sizeof(*fluddColors));
 	sync_after_write(SUSAMUNE_IL_EPISODES_PHYS_PTR, sizeof(struct SusamuneILEpisodesCfg));
+	sync_after_write(SUSAMUNE_PRACTICE_DISPLAY_STYLE_PHYS_PTR, sizeof(struct SusamunePracticeDisplayStyleCfg));
 	sync_after_write(progress, sizeof(struct SusamuneProgressCfg));
 	sync_after_write(playlists, sizeof(struct SusamuneStagePlaylistsCfg));
 	sync_after_write(targets, sizeof(struct SusamuneStageTargetsCfg));
@@ -6996,6 +7051,7 @@ void SusamuneCfgService(void)
 	sync_before_read(MarioColorsBlock(), sizeof(struct SusamuneMarioColorsCfg));
 	sync_before_read(FluddColorsBlock(), sizeof(struct SusamuneFluddColorsCfg));
 	sync_before_read(SUSAMUNE_IL_EPISODES_PHYS_PTR, sizeof(struct SusamuneILEpisodesCfg));
+	sync_before_read(SUSAMUNE_PRACTICE_DISPLAY_STYLE_PHYS_PTR, sizeof(struct SusamunePracticeDisplayStyleCfg));
 	seq = cfg->saveSeq;
 
 	ret = WriteIniFile(cfg);

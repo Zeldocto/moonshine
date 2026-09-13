@@ -5,6 +5,7 @@
 #include "susamune/settings_list.h"
 #include "susamune/binds_list.h"
 #include "susamune/iling_episodes.h"
+#include "susamune/practice_display_style.h"
 
 // =====================================================================
 // susamune_cfg.h
@@ -278,6 +279,22 @@ struct SusamuneWallkickStyleCfg {
     unsigned char  nativeTimerCustomMask[2];
     unsigned char  reserved1[8];
 };
+
+static inline void SusamunePracticeDisplayStyleFromWallkick(
+    struct SusamunePracticeDisplayStyleCfg *cfg,
+    const struct SusamuneWallkickStyleCfg *wallkick) {
+    unsigned int i, byte;
+    SusamunePracticeDisplayStyleInit(cfg);
+    if (!wallkick || wallkick->magic != SUSAMUNE_WALLKICK_STYLE_MAGIC ||
+        wallkick->version != SUSAMUNE_WALLKICK_STYLE_VERSION) return;
+    for (i = 0; i < SUSAMUNE_PRACTICE_DISPLAY_COUNT; ++i)
+        for (byte = 0; byte < 12u + 3u * SUSAMUNE_PRACTICE_DISPLAY_COLOR_COUNT; ++byte)
+            ((unsigned char *)&cfg->entries[i])[byte] = ((const unsigned char *)&wallkick->x)[byte];
+    for (i = 0; i < 4; ++i)
+        for (byte = 0; byte < 3; ++byte)
+            cfg->entries[SUSAMUNE_PRACTICE_DISPLAY_GB].rgb[i][byte] =
+                wallkick->rgb[i == 0 ? 1 : i == 1 ? 0 : 6][byte];
+}
 
 struct SusamuneMovementOverlayStyleCfg {
     unsigned short x;
@@ -1369,6 +1386,7 @@ typedef char susamune_mario_colors_dolphin_check[(SUSAMUNE_DOLPHIN_MARIO_COLORS_
 #endif
 typedef char susamune_fludd_colors_size_check[(sizeof(struct SusamuneFluddColorsCfg) == 64) ? 1 : -1];
 typedef char susamune_il_episodes_gap_check[(SUSAMUNE_FLUDD_COLORS_CFG_OFFSET + sizeof(struct SusamuneFluddColorsCfg) == SUSAMUNE_IL_EPISODES_CFG_OFFSET && SUSAMUNE_IL_EPISODES_CFG_OFFSET + sizeof(struct SusamuneILEpisodesCfg) <= SUSAMUNE_PROGRESS_CFG_OFFSET) ? 1 : -1];
+typedef char susamune_practice_display_gap_check[(SUSAMUNE_IL_EPISODES_CFG_OFFSET + sizeof(struct SusamuneILEpisodesCfg) == SUSAMUNE_PRACTICE_DISPLAY_STYLE_CFG_OFFSET && SUSAMUNE_PRACTICE_DISPLAY_STYLE_CFG_OFFSET + sizeof(struct SusamunePracticeDisplayStyleCfg) <= SUSAMUNE_PROGRESS_CFG_OFFSET) ? 1 : -1];
 typedef char susamune_fludd_colors_gap_check[(SUSAMUNE_MARIO_COLORS_CFG_OFFSET + sizeof(struct SusamuneMarioColorsCfg) == SUSAMUNE_FLUDD_COLORS_CFG_OFFSET && SUSAMUNE_FLUDD_COLORS_CFG_OFFSET + 64 <= SUSAMUNE_PROGRESS_CFG_OFFSET) ? 1 : -1];
 typedef char susamune_fludd_colors_dolphin_check[(SUSAMUNE_DOLPHIN_MARIO_COLORS_PPC_BASE + 32 == SUSAMUNE_DOLPHIN_FLUDD_COLORS_PPC_BASE && SUSAMUNE_DOLPHIN_FLUDD_COLORS_PPC_BASE + 64 <= SUSAMUNE_DOLPHIN_STATE_POOL_EXTRA_PPC_BASE) ? 1 : -1];
 

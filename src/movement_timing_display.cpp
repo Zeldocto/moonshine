@@ -170,20 +170,9 @@ bool draw(Menu *menu) {
                  (unsigned)sResultFrames, sResultFrames == 255 ? "+" : "",
                  sResultY, sResultV);
     }
-    SusamuneWallkickStyleCfg cfg;
-    gCreationExtras.stageWallkickInto(&cfg);
-    CreationStyle style;
-    memcpy(&style, &cfg.x, sizeof(style));
-    int width = Creation::textWidth(text, 20 * (int)style.scale / 100);
-    if (width > 620) {
-        style.scale = (u8)(style.scale * 620 / width);
-        if (style.scale < 50) style.scale = 50;
-        width = Creation::textWidth(text, 20 * (int)style.scale / 100);
-    }
-    if (style.x + width > 630) style.x = width < 620 ? 630 - width : 10;
-    Creation::drawTextBox(menu, style, cfg.rgb + (slide ? slide == 2 ? 0 : 1 :
-        sResult == JUMP ? sResultFrames - 1 : sResult == ON_TIME ? 0 :
-        sResult == EARLY ? 1 : 6), 1, text);
+    gCreationExtras.drawPracticeDisplay(menu, text,
+        slide ? 2 : sResult == JUMP ? 1 : 0,
+        slide ? slide == 2 ? 0 : 1 : sResult == JUMP ? sResultFrames - 1 : sResult);
     return true;
 }
 

@@ -43,7 +43,7 @@ API void volume(u32 second){testStoragePrefix=second?"1:" MOONSHINE_DATA_ROOT:MO
 API void unavailable(void){Enabled=false;}
 API u32 prepare(u32 value,const char*name){
  struct MoonshineLayoutFile*r=&layoutMailbox.file;
- memset(r,0,sizeof(*r));r->magic=MOONSHINE_LAYOUT_MAGIC;r->version=1;r->bytes=sizeof(*r);
+ memset(r,0,sizeof(*r));r->magic=MOONSHINE_LAYOUT_MAGIC;r->version=MOONSHINE_LAYOUT_VERSION;r->bytes=sizeof(*r);
  r->generation=layoutMailbox.generations[layoutMailbox.slot]+1u;if(!r->generation)r->generation=1;
  for(u32 i=0;i<15&&name[i];i++)r->name[i]=name[i];
  memset(&r->layout,value,sizeof(r->layout));r->checksum=MoonshineLayoutChecksum(r);return sizeof(*r);
@@ -67,6 +67,17 @@ API const void*payload(void){return &layoutMailbox.file.layout;}
 API const void*file(const char*p,u32*bytes){int i=lookup(p);if(i<0){*bytes=0;return 0;}*bytes=testFiles[i].size;return testFiles[i].bytes;}
 API void corrupt(const char*p,u32 offset){int i=lookup(p);if(i>=0&&offset<testFiles[i].size)((u8*)testFiles[i].bytes)[offset]^=1;}
 API void drop(const char*p){fixture_unlink(p);}
+API void legacy(const char*p){int i=lookup(p);if(i<0)return;
+ struct MoonshineLayoutFile*r=(struct MoonshineLayoutFile*)testFiles[i].bytes;
+ r->layout.wallkick.magic=SUSAMUNE_WALLKICK_STYLE_MAGIC;r->layout.wallkick.version=SUSAMUNE_WALLKICK_STYLE_VERSION;
+ r->layout.wallkick.x=111;r->layout.wallkick.y=222;
+ for(u32 c=0;c<7;c++)for(u32 b=0;b<3;b++)r->layout.wallkick.rgb[c][b]=c*10+b;
+ r->version=1;r->bytes=MOONSHINE_LAYOUT_V1_FILE_SIZE;r->checksum=MoonshineLayoutChecksum(r);
+ testFiles[i].size=r->bytes;
+}
+API u32 style(u32 i,u32 field){const struct SusamunePracticeDisplayStyle*s=&layoutMailbox.file.layout.practiceDisplays.entries[i];
+ return field==0?s->x:field==1?s->y:s->rgb[field-2][0];}
+API u32 loadedVersion(void){return layoutMailbox.file.version;}
 API void faults(u32 shortAt,u32 sync,u32 close,u32 readAt,u32 corrupt){
  failWriteAfter=shortAt;failSync=sync;failCloseAfterWrite=close;failReadAt=readAt;corruptReadback=corrupt;
  readBytes=readCalls=writeBytes=0;
@@ -111,6 +122,7 @@ class LayoutProfileKernelTests(unittest.TestCase):
         cls.lib.file.restype = C.c_void_p
         cls.lib.corrupt.argtypes = [C.c_char_p, C.c_uint]
         cls.lib.drop.argtypes = cls.lib.openFailure.argtypes = [C.c_char_p]
+        cls.lib.legacy.argtypes = [C.c_char_p]
 
     def setUp(self):
         self.lib.reset()
@@ -174,6 +186,28 @@ class LayoutProfileKernelTests(unittest.TestCase):
         self.assertEqual(self.lib.name(0), b'New')
         self.assertEqual(self.command(3), 0)
         self.assertEqual(C.c_ubyte.from_address(self.lib.payload()).value, 99)
+
+    def test_v1_profiles_upgrade_in_memory_and_keep_old_journal_until_explicit_save(self):
+        self.assertEqual(self.save(value=33, name=b'Existing E8A'), 0)
+        self.lib.legacy(self.path())
+        old = self.file(self.path())
+        self.assertEqual(len(old), 2256)
+        self.lib.reboot()
+        self.assertEqual(self.command(1), 0)
+        self.assertEqual(self.lib.name(0), b'Existing E8A')
+        self.assertEqual(self.command(3), 0)
+        self.assertEqual(self.lib.loadedVersion(), 2)
+        self.assertEqual(self.lib.generation(0), 1)
+        self.assertEqual(self.file(self.path()), old)
+        self.assertEqual(C.c_ubyte.from_address(self.lib.payload()).value, 33)
+        for style in range(3):
+            self.assertEqual([self.lib.style(style, f) for f in range(2)], [111, 222])
+        self.assertEqual([self.lib.style(0, c+2) for c in range(4)], [10, 0, 60, 60])
+        self.assertEqual([self.lib.style(1, c+2) for c in range(7)], list(range(0, 70, 10)))
+        self.assertEqual([self.lib.style(2, c+2) for c in range(2)], [0, 10])
+        self.assertEqual(self.save(value=77), 0)
+        self.assertEqual(self.file(self.path()), old)
+        self.assertEqual(len(self.file(self.path(copy='b'))), 2384)
 
     def test_corrupt_latest_copy_falls_back_to_complete_previous(self):
         self.save(value=11)

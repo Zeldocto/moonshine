@@ -1586,8 +1586,8 @@ Layout profile saved	レイアウトを保存しました。
 Layout profile applied	レイアウトを適用しました。
 GB skip timing	GBすり抜けタイミング
 Jump display	ジャンプ表示
-B timing after a full A jump: target 9f, Y404, V6. Uses wallkick layout.	最大Aジャンプ後のB入力。目標9f・Y404・V6。壁キック表示の配置を使用。
-Landing jump timing, buttslide jump readiness, or both. Uses wallkick layout.	着地後のジャンプ時間、おしりすべりのジャンプ可否、または両方。壁キック表示の配置を使用。
+B timing after a full A jump: target 9f, Y404, V6. Edit its style below.	最大Aジャンプ後のB入力。目標9f・Y404・V6。下の項目から表示を編集。
+Landing jump timing, buttslide jump readiness, or both. Edit each style below.	着地後のジャンプ時間、おしりすべりのジャンプ可否、または両方。下の項目から各表示を編集。
 Jump: %uf QF%u	ジャンプ: %uf QF%u
 Jump: Late QF%u	ジャンプ: 遅い QF%u
 GB timing: %s %u%sf Y%.0f V%.1f	GB: %s %u%sf Y%.0f V%.1f

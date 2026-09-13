@@ -6,9 +6,10 @@
 #define MOONSHINE_LAYOUT_COUNT 5u
 #define MOONSHINE_LAYOUT_NAME_SIZE 16u
 #define MOONSHINE_LAYOUT_MAGIC 0x4D4C5052u
-#define MOONSHINE_LAYOUT_VERSION 1u
+#define MOONSHINE_LAYOUT_VERSION 2u
+#define MOONSHINE_LAYOUT_V1_FILE_SIZE 2256u
 #define MOONSHINE_LAYOUT_MAILBOX_MAGIC 0x4D4C4D42u
-#define MOONSHINE_LAYOUT_MAILBOX_VERSION 1u
+#define MOONSHINE_LAYOUT_MAILBOX_VERSION 2u
 #define MOONSHINE_LAYOUT_CFG_FLAG 0x800000u
 #define MOONSHINE_LAYOUT_MAILBOX_OFFSET 0x6800u
 #define MOONSHINE_LAYOUT_MAILBOX_SIZE 0x1000u
@@ -35,6 +36,7 @@ struct MoonshineLayoutPayload {
     struct SusamuneNativeTimerStyleCfg nativeTimer;
     struct SusamuneMarioColorsCfg mario;
     struct SusamuneFluddColorsCfg fludd;
+    struct SusamunePracticeDisplayStyleCfg practiceDisplays;
 };
 
 struct MoonshineLayoutFile {
@@ -69,7 +71,9 @@ struct MoonshineLayoutMailbox {
 static inline unsigned int MoonshineLayoutChecksum(const struct MoonshineLayoutFile *file) {
     const unsigned char *bytes = (const unsigned char *)file;
     unsigned int hash = 2166136261u, i;
-    for (i = 0; i < sizeof(*file); ++i) {
+    if (!((file->version == 1u && file->bytes == MOONSHINE_LAYOUT_V1_FILE_SIZE) ||
+          (file->version == MOONSHINE_LAYOUT_VERSION && file->bytes == sizeof(*file)))) return 0;
+    for (i = 0; i < file->bytes; ++i) {
         unsigned char value = i >= 12u && i < 16u ? 0 : bytes[i];
         hash = (hash ^ value) * 16777619u;
     }
@@ -78,10 +82,20 @@ static inline unsigned int MoonshineLayoutChecksum(const struct MoonshineLayoutF
 
 static inline int MoonshineLayoutValid(const struct MoonshineLayoutFile *file) {
     return file->magic == MOONSHINE_LAYOUT_MAGIC &&
-           file->version == MOONSHINE_LAYOUT_VERSION &&
-           file->bytes == sizeof(*file) && file->generation != 0 &&
+           ((file->version == 1u && file->bytes == MOONSHINE_LAYOUT_V1_FILE_SIZE) ||
+            (file->version == MOONSHINE_LAYOUT_VERSION && file->bytes == sizeof(*file))) &&
+           file->generation != 0 &&
            file->name[MOONSHINE_LAYOUT_NAME_SIZE - 1] == '\0' &&
            file->checksum == MoonshineLayoutChecksum(file);
+}
+
+// Upgrade only the checked transfer copy; the existing journal stays intact.
+static inline void MoonshineLayoutUpgrade(struct MoonshineLayoutFile *file) {
+    if (file->version != 1u) return;
+    SusamunePracticeDisplayStyleFromWallkick(&file->layout.practiceDisplays, &file->layout.wallkick);
+    file->version = MOONSHINE_LAYOUT_VERSION;
+    file->bytes = sizeof(*file);
+    file->checksum = MoonshineLayoutChecksum(file);
 }
 
 #define MOONSHINE_LAYOUT_PHYS_PTR ((struct MoonshineLayoutMailbox *) \
@@ -94,8 +108,9 @@ static inline int MoonshineLayoutValid(const struct MoonshineLayoutFile *file) {
     (SUSAMUNE_MEM2_CFG_PPC_BASE + MOONSHINE_LAYOUT_MAILBOX_OFFSET))
 #endif
 
-typedef char moonshine_layout_payload_size[(sizeof(struct MoonshineLayoutPayload) == 2224) ? 1 : -1];
-typedef char moonshine_layout_file_size[(sizeof(struct MoonshineLayoutFile) == 2256) ? 1 : -1];
+typedef char moonshine_layout_payload_size[(sizeof(struct MoonshineLayoutPayload) == 2352) ? 1 : -1];
+typedef char moonshine_layout_file_size[(sizeof(struct MoonshineLayoutFile) == 2384) ? 1 : -1];
+typedef char moonshine_layout_v1_prefix[(__builtin_offsetof(struct MoonshineLayoutFile, layout.practiceDisplays) == MOONSHINE_LAYOUT_V1_FILE_SIZE) ? 1 : -1];
 typedef char moonshine_layout_reply_alignment[(__builtin_offsetof(struct MoonshineLayoutMailbox, ackSeq) == 32) ? 1 : -1];
 typedef char moonshine_layout_payload_alignment[(__builtin_offsetof(struct MoonshineLayoutMailbox, file) == 160) ? 1 : -1];
 typedef char moonshine_layout_mailbox_size[(sizeof(struct MoonshineLayoutMailbox) <= MOONSHINE_LAYOUT_MAILBOX_SIZE) ? 1 : -1];
