@@ -26,13 +26,15 @@ class EpisodeRouteTests(unittest.TestCase):
         code += 'typedef unsigned char u8;typedef unsigned int u32;\n'
         code += 'struct TGameSequence {' + sequence[sequence.index('    enum Area {'):sequence.index('    void set(')] + '};\n'
         code += 'namespace LevelWarp {struct Dest {u8 area,episode,gameInt3;};u8 parentArea(u8);}\n'
+        # Fast Any% origins have separate lifecycle coverage; these are the normal IL choices.
+        code += 'namespace StageLoader {bool fastAnyStart(int){return false;}}\n'
         code += re.search(r'(?:constexpr|const) u8 kParentAreas\[\].*?\n};', warp, re.S).group(0)
         code += function(warp, 'LevelWarp::parentArea')
         code += source[source.index('enum FinishKind {'):source.index('const int kSecretOnlyPbSlotFirst')]
         code += 'struct Settings {int dirty;void markDirty(){++dirty;}}gSettings;\n'
         code += 'u8 sEpisodeChoices[SUSAMUNE_IL_EPISODE_COUNT];\n'
         code += 'bool sRunning;int sSelectedEntry;LevelWarp::Dest sAttemptStart;\n'
-        for name in ('kEntryFullRedsFirst', 'kEntryFullRedsLast'):
+        for name in ('kEntryFullRedsFirst', 'kEntryFullRedsLast', 'kEntryNoki3Inside'):
             code += re.search(r'const int ' + name + r' = \d+;', source).group(0)
         for name in ('validEntry', 'pbSlot', 'episodeChoiceIndex', 'parentOrSelf',
                      'selectedStart', 'selectedEpisode', 'setEpisode', 'entryFinish',

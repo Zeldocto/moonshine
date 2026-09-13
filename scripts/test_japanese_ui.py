@@ -7,9 +7,11 @@ import struct
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 import zlib
 
-from gen_japanese_ui import build, catalogue, expand, TOKENS, JA_TOKENS, MAX_SIZE
+from gen_japanese_ui import (build, catalogue, expand, font_glyph, supplemental_glyphs,
+                             yay0, TOKENS, JA_TOKENS, MAX_SIZE)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -99,6 +101,47 @@ __declspec(dllexport) unsigned int counts(unsigned int which) {return which==0?b
             if not line.strip() or line.startswith('#'):continue
             en,ja=line.split('\t')
             self.assertEqual(self.lib.lookup(expand(en,TOKENS)),expand(ja,JA_TOKENS),en)
+
+    def test_achievement_supplement_changes_only_the_missing_glyph(self):
+        supplement = supplemental_glyphs()
+        self.assertEqual(set(supplement), {0x7DBA})
+        source_codes = json.loads((ROOT/'data/fonts/droid-japanese-codepoints.json').read_text())
+        source_map = {code: i for i, code in reversed(list(enumerate(source_codes)))}
+        source_map[0x7E] = source_map[0x203E]
+        self.assertNotIn(0x7DBA, source_map)
+        font = yay0((ROOT/'data/fonts/droid-japanese.yay').read_bytes())
+        aliases = {int(old, 16): int(JA_TOKENS[name], 16) for name, old in TOKENS.items()}
+        glyph_offset, count, pixel_offset = struct.unpack_from('>III', self.asset, 32)
+        found = False
+        for index in range(count):
+            code, width, reserved = struct.unpack_from('>HBB', self.asset, glyph_offset+4*index)
+            resolved = aliases.get(code, code)
+            character = ord(resolved.to_bytes(1 if resolved < 256 else 2, 'big').decode('cp932'))
+            if character in supplement:
+                expected_width, expected_image = supplement[character]
+                found = True
+            else:
+                expected_width, expected_image = font_glyph(font, source_map[character])
+            self.assertEqual((width, reserved), (expected_width, 0), hex(code))
+            self.assertEqual(self.asset[pixel_offset+index*64:pixel_offset+(index+1)*64],
+                             expected_image, hex(code))
+        self.assertTrue(found)
+        self.assertEqual(self.lib.lookup(b'Clean Sweep'), '綺麗な射線'.encode('cp932'))
+        self.assertEqual(self.lib.measure('綺'.encode('cp932')), 20)
+
+    def test_supplement_cannot_replace_an_existing_font_glyph(self):
+        with patch('gen_japanese_ui.supplemental_glyphs', return_value={ord('A'): (20, bytes([255])*64)}):
+            with self.assertRaisesRegex(ValueError, 'replace a Droid glyph'):
+                build()
+
+    def test_invalid_supplement_is_rejected(self):
+        with tempfile.TemporaryDirectory(prefix='moonshine-ja-glyph-') as work:
+            path = Path(work)/'glyph.json'
+            for width, image in ((0, 'ff'*64), (25, 'ff'*64), (20, 'ff'*63), (20, '00'*64)):
+                path.write_text(json.dumps({'glyphs': {'7DBA': {'width': width, 'image': image}}}),
+                                encoding='utf-8')
+                with self.assertRaisesRegex(ValueError, 'invalid supplemental glyph'):
+                    supplemental_glyphs(path)
 
     def test_unknown_text_and_missing_asset_preserve_english(self):
         self.assertEqual(self.lib.lookup(b'User custom text 987'),b'User custom text 987')

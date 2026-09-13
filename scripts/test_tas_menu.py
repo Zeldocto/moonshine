@@ -54,6 +54,7 @@ struct Binds {bool rec;bool recording(){return rec;}void cancelRecord(){rec=fals
 void updateAchievementBanner(){}bool rngControlInvalidatesIl(){return false;}
 namespace WarpWheel {bool promptShown(){return false;}}
 namespace StageTargets {void service(Menu*){}}
+namespace LayoutProfiles {const char*poll(){return nullptr;}}
 namespace MarioColors {bool dirty(){return false;}}
 namespace FluddColors {bool dirty(){return false;}}
 struct Display {bool dirty(){return false;}void update(){}}gInputDisplay,gMetadataDisplay,gQftDisplay,gCreationExtras;

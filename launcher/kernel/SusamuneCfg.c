@@ -59,6 +59,7 @@ still dropped, since those sections are regenerated wholesale.
 
 #include "susamune/susamune_cfg.h"
 #include "susamune/data_paths.h"
+#include "susamune/layout_profile.h"
 #include "susamune/mod_bin.h"
 
 // Set by DIinit() from the disc header; SusamuneCfgInit() runs after it.
@@ -6860,7 +6861,8 @@ void SusamuneCfgInit(void)
 	                 SUSAMUNE_CFG_FLAG_FLUDD_COLORS |
 	                 SUSAMUNE_CFG_FLAG_IL_EPISODES |
 	                 SUSAMUNE_CFG_FLAG_STATE_POOL_EXPANSION |
-	                 SUSAMUNE_CFG_FLAG_STATE_CODEC_RELOCATED;
+	                 SUSAMUNE_CFG_FLAG_STATE_CODEC_RELOCATED |
+	                 MOONSHINE_LAYOUT_CFG_FLAG;
 	if (InitPbFiles(cfg, region))
 		cfg->flags |= SUSAMUNE_CFG_FLAG_ILING_PBS |
 		              SUSAMUNE_CFG_FLAG_ILING_PROFILES;

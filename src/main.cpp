@@ -58,6 +58,7 @@
 #include "susamune/nintendont_cfg.h"
 #include "susamune/wallkick_display.hxx"
 #include "susamune/movement_display.hxx"
+#include "susamune/movement_timing_display.hxx"
 #include "susamune/gameplay_polish.hxx"
 
 namespace {
@@ -280,6 +281,7 @@ extern "C" void onSetup(TMarDirector* director) {
         Records::invalidateAttempt();
     WallkickDisplay::onStageSetup();
     MovementDisplay::onStageSetup();
+    MovementTimingDisplay::onStageSetup();
     CrashReport::note(SUSAMUNE_CRASH_EVENT_STAGE_READY,
                       static_cast<u32>(director->mAreaID) << 8 |
                           director->mEpisodeID,
@@ -465,6 +467,7 @@ extern "C" s32 onUpdate(JDrama::TDirector* director) {
         PracticeSession::assisted());
     WallkickDisplay::beforeDirect(marioActive);
     MovementDisplay::beforeDirect(marioActive);
+    MovementTimingDisplay::beforeDirect(marioActive);
     GameplayPolish::beforeDirect();
     if (freeze) {
         gpMarDirector->mCurState = TMarDirector::STATE_STAGE_EXIT_2;
@@ -488,6 +491,7 @@ extern "C" s32 onUpdate(JDrama::TDirector* director) {
     Ghost::afterDirect(state);
     WallkickDisplay::afterDirect(marioActive);
     MovementDisplay::afterDirect(marioActive);
+    MovementTimingDisplay::afterDirect(marioActive);
     GameplayPolish::afterDirect();
     if (gSettings.getBool(SETTING_DISABLE_WARPS) &&
         !WarpWheel::retailExitPending()) {

@@ -123,7 +123,7 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
         self.lib.set(128, 4)
         self.lib.set(129, 1)
         self.lib.stage()
-        self.assertEqual(self.lib.count(), 140)
+        self.assertEqual(self.lib.count(), 142)
         self.assertEqual([self.lib.read(i) for i in (128,129)], [4,1])
         self.assertEqual(bytes(self.lib.byteAt(i) for i in range(192,320)), b'\xa5'*128)
 
@@ -156,7 +156,7 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
         self.assertEqual(self.lib.get(138), 1)
         self.lib.set(138, 0)
         self.lib.stage()
-        self.assertEqual(self.lib.count(), 140)
+        self.assertEqual(self.lib.count(), 142)
         self.assertEqual(self.lib.read(138), 0)
         self.assertEqual(self.lib.cardRoundtrip(0), 1)
         self.assertEqual(self.lib.get(138), 0)
@@ -194,6 +194,27 @@ API unsigned corruptExtra(unsigned i){record.cfg.extraValues[i]^=1;return valid(
         self.assertLess(service.index('sync_before_read(cfg, 32)'), service.index('WriteIniFile(cfg)'))
         self.assertIn('sync_after_write(&cfg->ackSeq, 32)', service)
         self.assertNotIn('sync_after_write(cfg,', service)
+
+    def test_new_timing_displays_default_off_and_use_last_two_header_bytes(self):
+        self.lib.reset(140)
+        self.lib.adopt()
+        self.assertEqual([self.lib.get(i) for i in (140, 141)], [0, 0])
+        for index in (140, 141):
+            self.lib.set(index, 1)
+        self.lib.stage()
+        self.assertEqual([self.lib.read(i) for i in (140, 141)], [1, 1])
+        self.assertEqual(bytes(self.lib.byteAt(i) for i in range(192, 320)), b'\xa5' * 128)
+        self.assertEqual(self.lib.cardRoundtrip(0), 1)
+        self.assertEqual([self.lib.get(i) for i in (140, 141)], [1, 1])
+        for value, label in enumerate(('Off', 'Landing', 'Buttslide', 'Both')):
+            self.lib.set(141, value)
+            self.assertEqual(self.lib.label(141).decode(), label)
+            self.assertEqual(self.lib.cardRoundtrip(0), 1)
+            self.assertEqual(self.lib.get(141), value)
+        self.lib.cycle(141, 1)
+        self.assertEqual(self.lib.get(141), 0)
+        self.lib.set(141, 4)
+        self.assertEqual(self.lib.get(141), 0)
 
 
 if __name__ == '__main__':

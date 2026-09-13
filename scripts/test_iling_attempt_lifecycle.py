@@ -48,7 +48,8 @@ s32 sSavedBowserNozzleFlag;LevelWarp::Dest sAttemptStart;
 u8 sFinishKind,sAssistReasons;int sSelectedEntry;u32 sAttemptSerial;
 u8 liveReasons;int recordStarts,recordInvalid,playlistInvalid,splitInvalid;
 namespace Records {void onILAttemptStarted(int){++recordStarts;recordInvalid=0;}void invalidateAttempt(u8){++recordInvalid;}}
-namespace StageLoader {void invalidatePlaylistBest(){++playlistInvalid;}}
+namespace StageLoader {void invalidatePlaylistBest(){++playlistInvalid;}bool fastAnyStart(int){return false;}}
+namespace Assist {enum {OTHER=1};}
 namespace SplitStats {void invalidateAttempt(){++splitInvalid;}}
 u8 liveGlobalAssistReasons(){return liveReasons;}
 bool isPlazaEntry(int){return false;}
@@ -56,7 +57,7 @@ void applyPlazaOverlay(int){}void applyEntryOverlay(int){}
 int entryForChildMode(const TGameSequence&,int){return 26;}
 void clearAttempt(){sRunning=false;sAwaitingStageSetup=false;sSelectedEntry=-1;}
 '''
-        for name in ('validEntry','pbSlot','sameDest','sceneMatches','entryFinish','acceptsAnySelectedOrigin',
+        for name in ('validEntry','pbSlot','sameDest','sessionStartChanged','sceneMatches','entryFinish','acceptsAnySelectedOrigin',
                      'isPinnaOneRouteScene','isPinnaEightReturn','acceptsSelectedOriginScene',
                      'isInternalScene','entryForStartScene','armAttempt','beginAttemptScene',
                      'beforeStageSetup','invalidateForAssist'):

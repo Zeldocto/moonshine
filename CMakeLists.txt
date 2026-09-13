@@ -77,6 +77,7 @@ set(LAUNCHER_DEFAULT_SOURCE "di" CACHE STRING "Where to load the iso from by def
 set_property(CACHE LAUNCHER_DEFAULT_SOURCE PROPERTY STRINGS di sd usb)
 if(LAUNCHER_VERSION STREQUAL "V1.2.0" OR
    LAUNCHER_VERSION STREQUAL "V2.3.0 Frame By Frame" OR
+   LAUNCHER_VERSION STREQUAL "V2.3.1 Frame By Frame" OR
    LAUNCHER_VERSION STREQUAL "V2.1.1" OR
    LAUNCHER_VERSION STREQUAL "V2.2.0 \"The House Always Wins\"" OR
    LAUNCHER_VERSION STREQUAL "V2.0.0 \"Ghosts of Delfino\"" OR
@@ -94,7 +95,7 @@ if(LAUNCHER_VERSION STREQUAL "V1.2.0" OR
    LAUNCHER_VERSION MATCHES "^V2\\.3\\.0 .*Pre-release")
     unset(LAUNCHER_VERSION CACHE)
 endif()
-set(LAUNCHER_VERSION "V2.3.1 Frame By Frame" CACHE STRING
+set(LAUNCHER_VERSION "V2.3.2 Frame By Frame" CACHE STRING
     "Version shown in the packaged launcher meta.xml")
 
 option(IS_EMULATOR "Target Dolphin (ON) instead of Wii/Nintendont (OFF)" OFF)
@@ -274,7 +275,8 @@ set(JAPANESE_UI_INPUTS
     "${CMAKE_SOURCE_DIR}/scripts/gen_japanese_ui.py"
     "${CMAKE_SOURCE_DIR}/data/japanese_ui.tsv"
     "${CMAKE_SOURCE_DIR}/data/fonts/droid-japanese.yay"
-    "${CMAKE_SOURCE_DIR}/data/fonts/droid-japanese-codepoints.json")
+    "${CMAKE_SOURCE_DIR}/data/fonts/droid-japanese-codepoints.json"
+    "${CMAKE_SOURCE_DIR}/data/fonts/noto-japanese-supplement.json")
 add_custom_command(OUTPUT "${JAPANESE_UI_ASSET}"
     COMMAND "${VENV_PYTHON}" "${CMAKE_SOURCE_DIR}/scripts/gen_japanese_ui.py" "${JAPANESE_UI_ASSET}"
     DEPENDS ${JAPANESE_UI_INPUTS}
@@ -431,7 +433,7 @@ ExternalProject_Add(nintendont_launcher
         "-DLAUNCHER_VERSION=${LAUNCHER_VERSION}"
         "-DLAUNCHER_TEST_LOG="
         "-DLAUNCHER_PATTERN_TEST_LOG="
-        "-DLAUNCHER_CHANGELOG=${CMAKE_SOURCE_DIR}/doc/release-notes-v2.3.1.md"
+        "-DLAUNCHER_CHANGELOG=${CMAKE_SOURCE_DIR}/doc/release-notes-v2.3.2.md"
         "-DLAUNCHER_DISABLE_SUSAMUNE_PATCH=${LAUNCHER_DISABLE_SUSAMUNE_PATCH}"
         "-DSUSAMUNE_LOADER_OPTIMIZATION:STRING=${SUSAMUNE_LOADER_OPTIMIZATION}"
     DEPENDS mod_bins launcher_build_id japanese_ui

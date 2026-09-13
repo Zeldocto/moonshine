@@ -21,6 +21,12 @@ static SusamuneCfg fixtureCfg;static SusamuneSplitStatsCfg mailbox;
 #undef SUSAMUNE_SPLIT_STATS_PPC_PTR
 #define SUSAMUNE_CFG_PPC_PTR (&fixtureCfg)
 #define SUSAMUNE_SPLIT_STATS_PPC_PTR (&mailbox)
+// This suite exercises the cache with its runtime already admitted. The memory
+// suite separately runs the real launcher/map admission checks.
+alignas(32) static u8 runtimeMemory[SUSAMUNE_SPLIT_STATS_RUNTIME_SIZE];
+#undef SUSAMUNE_SPLIT_STATS_RUNTIME_PPC_BASE
+#define SUSAMUNE_SPLIT_STATS_RUNTIME_PPC_BASE ((__UINTPTR_TYPE__)runtimeMemory)
+static bool runtimeAvailable(){return true;}
 static u32 published;
 static void DCInvalidateRange(void*,u32){}
 static void DCStoreRange(void*p,u32 n){if(p==&mailbox&&n==32)++published;}

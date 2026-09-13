@@ -6,6 +6,7 @@
 #include <Dolphin/string.h>
 
 #include "susamune/creation.hxx"
+#include "susamune/ghost_storage.h"
 #include "susamune/iling.hxx"
 #include "susamune/mem2_map.h"
 #include "susamune/menu.hxx"
@@ -134,10 +135,11 @@ struct Runtime {
     u8 overlayColor;
 };
 
-Runtime sStateStorage;
-Runtime *const sState = &sStateStorage;
+Runtime *sState;
 static_assert(sizeof(Runtime) == 0x3790,
               "split runtime layout drifted");
+static_assert(sizeof(Runtime) <= SUSAMUNE_SPLIT_STATS_RUNTIME_SIZE,
+              "split runtime exceeds its metadata tail window");
 static_assert(SplitStats::ROUTE_COUNT == SUSAMUNE_SPLIT_STATS_ROUTE_COUNT,
               "split route schema drifted");
 static_assert(sizeof(RouteDesc) == 4, "split route descriptor drifted");
@@ -146,6 +148,24 @@ static_assert(495 == SUSAMUNE_SPLIT_STATS_SEGMENT_COUNT,
               "split segment layout changed");
 static_assert(sizeof(kFreezeFrames) == 6,
               "split overlay duration choices changed");
+
+bool runtimeAvailable() {
+#if IS_EMULATOR
+    return true;
+#else
+    const volatile SusamuneCfg *cfg = SUSAMUNE_CFG_PPC_PTR;
+    DCInvalidateRange((void *)cfg, 32);
+    const u32 flags = SUSAMUNE_CFG_FLAG_STATE_POOL_EXPANSION |
+                      SUSAMUNE_CFG_FLAG_STATE_CODEC_RELOCATED;
+    if (cfg->magic != SUSAMUNE_CFG_MAGIC ||
+        cfg->version != SUSAMUNE_CFG_VERSION ||
+        (cfg->flags & flags) != flags) return false;
+    volatile SusamuneGhostStorageMailbox *mailbox = SUSAMUNE_GHOST_STORAGE_PPC_PTR;
+    DCInvalidateRange((void *)&mailbox->response, 32);
+    return mailbox->response.responseMagic == SUSAMUNE_GHOST_STORAGE_MAGIC &&
+           mailbox->response.protocolVersion == SUSAMUNE_GHOST_STORAGE_VERSION;
+#endif
+}
 
 u32 saturatedIncrement(u32 value) {
     return value == 0xffffffffu ? value : value + 1;
@@ -512,6 +532,10 @@ void pollSave() {
 namespace SplitStats {
 
 void init() {
+    // Latch ownership before touching the shared bank; old launchers fail closed.
+    sState = runtimeAvailable() ? reinterpret_cast<Runtime *>(
+        SUSAMUNE_SPLIT_STATS_RUNTIME_PPC_BASE) : nullptr;
+    if (!sState) return;
     memset(sState, 0, sizeof(*sState));
     resetPayload();
     clearAttemptSamples();
@@ -542,10 +566,12 @@ void init() {
 }
 
 void beginFrame() {
+    if (!sState) return;
     if (sState->overlayFrames > 0) sState->overlayFrames--;
 }
 
 void update() {
+    if (!sState) return;
     sampleAttemptTime();
 #if !IS_EMULATOR
     pollSave();
@@ -566,9 +592,10 @@ void update() {
 #endif
 }
 
-void onStageSetup() { clearOverlay(); }
+void onStageSetup() { if (sState) clearOverlay(); }
 
 void onILAttemptStarted(int entry, bool eligible) {
+    if (!sState) return;
     const int route = routeForAttempt(entry);
     const u32 serial = gQFTTimer.attemptSerial();
     const bool duplicate = sState->lastAttemptSerial == serial &&
@@ -608,15 +635,17 @@ void onILAttemptStarted(int entry, bool eligible) {
     }
 }
 
-void onILAttemptEnded() { endAttempt(); }
+void onILAttemptEnded() { if (sState) endAttempt(); }
 
 void invalidateAttempt() {
+    if (!sState) return;
     commitAttemptTime();
     sState->flags &= ~FLAG_ATTEMPT_ELIGIBLE;
     sState->candidateGoldMask = 0;
 }
 
 void onILResult(int entry, s32 qf) {
+    if (!sState) return;
     const int routeIndex = routeForResult(entry);
     if (routeIndex < 0 || qf < 0 || qf > SUSAMUNE_ILING_PB_MAX_QF ||
         !(sState->flags & FLAG_ATTEMPT_ACTIVE) ||
@@ -666,6 +695,7 @@ void onILResult(int entry, s32 qf) {
 }
 
 void onPBDeleted(int entry, int profile) {
+    if (!sState) return;
     const int routeIndex = routeForEntry(entry);
     if (routeIndex < 0 || profile < 0 ||
         profile >= SUSAMUNE_SPLIT_STATS_PROFILE_COUNT) {
@@ -683,6 +713,7 @@ void onPBDeleted(int entry, int profile) {
 }
 
 void onSavestateLoaded() {
+    if (!sState) return;
     commitAttemptTime();
     sState->flags &= ~(FLAG_ATTEMPT_ACTIVE | FLAG_ATTEMPT_ELIGIBLE |
                        FLAG_TIME_ACTIVE);
@@ -693,22 +724,22 @@ void onSavestateLoaded() {
 }
 
 bool onRouteEvent(u16 routeId, u8 eventId, s32 absoluteQf) {
-    if (routeId >= ROUTE_COUNT ||
+    if (!sState || routeId >= ROUTE_COUNT ||
         eventId >= kRoutes[routeId].checkpointCount) return false;
     return captureSegment(routeId, eventId, absoluteQf);
 }
 
 bool routeActive(u16 routeId) {
-    return routeId < ROUTE_COUNT &&
+    return sState && routeId < ROUTE_COUNT &&
            (sState->flags & FLAG_ATTEMPT_ACTIVE) &&
            sState->activeRoute == routeId;
 }
 
-bool supportsEntry(int entry) { return routeForEntry(entry) >= 0; }
+bool supportsEntry(int entry) { return sState && routeForEntry(entry) >= 0; }
 
 bool summary(int entry, Summary *out) {
     const int routeIndex = routeForEntry(entry);
-    if (routeIndex < 0 || !out) return false;
+    if (!sState || routeIndex < 0 || !out) return false;
     const u8 route = (u8)routeIndex;
     const SusamuneSplitRouteStats &stats =
         sState->payload.routeStats[route];
@@ -752,6 +783,7 @@ bool summary(int entry, Summary *out) {
 }
 
 DeleteGoldResult deleteGold(int entry, u8 localSegment) {
+    if (!sState) return DELETE_GOLD_READ_ONLY;
     const int routeIndex = routeForEntry(entry);
     if (routeIndex < 0) return DELETE_GOLD_INVALID;
     if ((sState->flags & FLAG_PERSISTENT) &&
@@ -779,6 +811,7 @@ DeleteGoldResult deleteGold(int entry, u8 localSegment) {
 }
 
 StorageState storageState() {
+    if (!sState) return STORAGE_FAILED;
     if (!(sState->flags & FLAG_PERSISTENT)) return STORAGE_SESSION;
     if (!(sState->flags & FLAG_WRITABLE)) return STORAGE_READ_ONLY;
     if (sState->flags & FLAG_PENDING) return STORAGE_SAVING;
@@ -820,7 +853,7 @@ void drawJpPositiveDelta(Menu *menu, const CreationStyle &style,
 #endif
 
 void draw(Menu *menu) {
-    if (!menu || !gSettings.getBool(SETTING_LEVEL_SPLITS) ||
+    if (!sState || !menu || !gSettings.getBool(SETTING_LEVEL_SPLITS) ||
         sState->overlayFrames == 0 || !sState->overlayText[0] ||
         sState->overlayAnchorQf < 0) {
         return;

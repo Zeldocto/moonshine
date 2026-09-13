@@ -1,4 +1,4 @@
-# Moonshine V2.3.1 Frame By Frame 日本語版
+# Moonshine V2.3.2 Frame By Frame 日本語版
 
 ユーザーガイド
 
@@ -198,7 +198,7 @@ Display > Timer and splits > Timer and splits の比較対象は **Off → PB �
 
 ## レイアウトと色
 
-Display > Layout editor は、Timers、Controller inputs、Metadata、Native HUD colours、Custom text、Practice feedback、Menu and notifications に分かれています。Rollout と Dust は Practice feedback にあり、HUD and displays > Movement feedback からも編集できます。
+Display > Layout editor は、Timers、Controller inputs、Metadata、Native HUD colours、Custom text、Practice feedback、Menu and notifications に分かれています。Rollout と Dust は Practice feedback にあり、HUD and displays > Movement displays からも編集できます。
 
 **Timers > Sunshine timer** で位置・サイズ・不透明度・明るさ、13文字、TIME/TEMPO、背景の帯を編集します。位置は画面全体に移動できます。
 
@@ -218,6 +218,18 @@ Display > Layout editor は、Timers、Controller inputs、Metadata、Native HUD
 マリオの肌の色は変えません。帽子とシャツをマゼンタにしたとき、テクスチャの丸め処理で赤い点が混ざる問題を修正しました。水の設定は噴流、ノズル口の霧、着水時のしぶきに適用し、海水やヨッシーのジュースは元の色を保ちます。編集を Keep すると、色と各部位の Original/Custom の選択を次回起動にも引き継ぎます。
 
 **Metadata** では Field gap、Row gap、Fields per row、Value widths を C スティック左右で調整できます。横並びで Fields per row を設定すると、指定した項目数で折り返します。Auto は画面端で折り返します。Stable は桁数が変わっても位置を保ち、Compact は空白を詰めます。文字ごとの色は元の項目に対応したままです。
+
+## レイアウトの保存とタイミング表示
+
+**Jump display** は **Landing（着地後）**、**Buttslide（おしりすべり）**、**Both（両方）** を選べます。おしりすべり表示は、地面と滑り状態に応じて、ゲームがジャンプを受け付ける時を示します。コマ送り中も使えます。A入力の自動生成や予約は行いません。
+
+**Display > Layout profiles** では、ゲーム版ごとに5つの名前付きレイアウトを保存できます。**Y** で現在のレイアウトを保存し、名前を入力して **Start** で確定します。既存のデータを置き換える前に確認します。**A** で保存済みレイアウトを適用します。表示位置、色、カスタムテキスト、メニュースタイル、マリオとポンプの色などを含みます。ボタン割り当て、練習ルール、記録は変更しません。ランチャーでは **Moonshine data/layouts**、Dolphin ではスロット B のメモリーカードに保存し、再起動後も使えます。
+
+**Display > HUD and displays > Movement displays** の **Jump display** は、直前の着地からジャンプまでを **1f～6f**、それ以降は **Late（遅い）** と表示し、離陸したクォーターフレームも示します。例えば `Jump: 1f QF2` は、着地の1フレーム後、QF2でジャンプしたことを意味します。着地するたびに数え直します。一時停止中の時間は数えず、ステート読込やエリア移動で表示を消します。
+
+**GB skip timing** は、通常の最大 A ジャンプ後に B を押すタイミングを調べます。ホバー禁止 GBskip の目標は、空中9フレーム、Y約404、V速度約6です。早い・適切・遅い・ジャンプ要確認と、フレーム数・高さ・V速度を表示します。X/Zや、実際にすり抜けたかどうかは判定しません。両方の表示は壁キック表示の位置・サイズ・色を共有します。
+
+**Fast Any%** のピンナはビーチ、ノーキー3はビンの外から始まります。ヒミツでミスした後もクリアすれば次へ進みますが、そのリトライは通常のフルレベルPBやプレイリストベストにはなりません。単独ILの開始地点は変わりません。
 
 ## Dolphin
 

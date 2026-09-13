@@ -163,10 +163,10 @@ class ReleasePackagingTests(unittest.TestCase):
         with patch.object(release.package_launcher, "launcher_files", side_effect=app):
             packages = release.archive_contents(args, {"build_checksum":"DEADBEEF"}, patches)
         self.assertEqual(set(packages), {
-            "Moonshine_ENGLISH-MENUS_Launcher_V2.3.1_US-PAL-JP.zip",
-            "Moonshine_JAPANESE-MENUS_Launcher_V2.3.1_US-PAL-JP.zip",
-            "Moonshine_ENGLISH-MENUS_Dolphin_V2.3.1_US-PAL-JP.zip",
-            "Moonshine_JAPANESE-MENUS_Dolphin_V2.3.1_JP.zip",
+            "Moonshine_ENGLISH-MENUS_Launcher_V2.3.2_US-PAL-JP.zip",
+            "Moonshine_JAPANESE-MENUS_Launcher_V2.3.2_US-PAL-JP.zip",
+            "Moonshine_ENGLISH-MENUS_Dolphin_V2.3.2_US-PAL-JP.zip",
+            "Moonshine_JAPANESE-MENUS_Dolphin_V2.3.2_JP.zip",
         })
         for name, (language, kind, files) in packages.items():
             self.assertTrue(name.isascii())

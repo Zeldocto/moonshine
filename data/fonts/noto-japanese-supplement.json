@@ -1,0 +1,12 @@
+{
+  "source": "NotoSansMonoCJKjp-VF.ttf",
+  "source_sha256": "9a91b2f42ad958fd4295586809f85366f0afa020b85ac70b39916c25bc5cda15",
+  "license": "SIL Open Font License 1.1; launcher/loader/data/OFL-NotoSansCJK.txt",
+  "rasterization": "Weight 500, 80px glyph at (0,0) in a 96x96 L image; BOX resize to 16x16, quantize (value*3+127)//255; GX I2 tiles",
+  "glyphs": {
+    "7DBA": {
+      "width": 20,
+      "image": "0000000009000c1a698577421e5e19ee000000006000fa40e540fd000740ab80bfe50a5b3ac97a9aaa490a00050000005b40e7006700a70057002b0015000000"
+    }
+  }
+}

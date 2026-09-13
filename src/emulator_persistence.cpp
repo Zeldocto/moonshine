@@ -10,6 +10,7 @@
 #include <SMS/System/Application.hxx>
 #include <SMS/System/CardManager.hxx>
 #include "susamune/addresses.hxx"
+#include "susamune/layout_profile.h"
 
 namespace EmulatorPersistence {
 namespace {
@@ -545,6 +546,164 @@ s32 writeRecordLocked() {
     return result;
 }
 
+u32 layoutSlotLocked(MoonshineLayoutMailbox *mailbox, u32 slot, u32 operation) {
+    char name[] = "moonshine_layout_1";
+    name[sizeof(name) - 2] = (char)('1' + slot);
+    CARDFileInfo file;
+    bool created = false;
+    s32 result = CARDOpen(CARD_SLOTB, name, &file);
+    if (result == CARD_ERROR_NOFILE) {
+        mailbox->presentMask &= ~(1u << slot);
+        mailbox->badMask &= ~(1u << slot);
+        mailbox->generations[slot] = 0;
+        memset(mailbox->names[slot], 0, MOONSHINE_LAYOUT_NAME_SIZE);
+        if (operation == MOONSHINE_LAYOUT_LIST) return 0;
+        if (mailbox->expectedGeneration) return MOONSHINE_LAYOUT_ERROR_CHANGED;
+        if (operation == MOONSHINE_LAYOUT_LOAD) return MOONSHINE_LAYOUT_ERROR_EMPTY;
+        result = CARDCreate(CARD_SLOTB, name, kFileSize, &file);
+        created = result == CARD_ERROR_READY;
+    }
+    if (result != CARD_ERROR_READY) return errorCode(result);
+    CARDStat fileStatus;
+    result = CARDGetStatus(CARD_SLOTB, file.mFileNo, &fileStatus);
+    if (result != CARD_ERROR_READY || fileStatus.mLength != kFileSize) {
+        CARDClose(&file);
+        mailbox->badMask |= 1u << slot;
+        return result == CARD_ERROR_READY ? MOONSHINE_LAYOUT_ERROR_INVALID : errorCode(result);
+    }
+    // CARDCreate publishes recycled blocks before any file data is written.
+    // The directory's comment address commits initialization independently.
+    if (fileStatus.mCommentAddr != kSectorSize - 64u) {
+        mailbox->presentMask &= ~(1u << slot);
+        mailbox->badMask |= 1u << slot;
+        mailbox->generations[slot] = 0;
+        memset(mailbox->names[slot], 0, MOONSHINE_LAYOUT_NAME_SIZE);
+        if (operation != MOONSHINE_LAYOUT_SAVE || mailbox->expectedGeneration) {
+            const s32 closed = CARDClose(&file);
+            if (closed != CARD_ERROR_READY) return errorCode(closed);
+            return mailbox->expectedGeneration ? MOONSHINE_LAYOUT_ERROR_CHANGED :
+                operation == MOONSHINE_LAYOUT_LIST ? 0u : MOONSHINE_LAYOUT_ERROR_INVALID;
+        }
+        created = true;
+    }
+    u8 *sector = reinterpret_cast<u8 *>(gpCardManager->mCARDBlock);
+    MoonshineLayoutFile *record = reinterpret_cast<MoonshineLayoutFile *>(sector);
+    static_assert(sizeof(*record) <= kSectorSize, "layout must fit a CARD sector");
+    u32 generation = 0, best = 1;
+    char bestName[MOONSHINE_LAYOUT_NAME_SIZE] = {};
+    bool invalid = false;
+    for (u32 copy = 0; !created && copy < 2; ++copy) {
+        result = CARDRead(&file, sector, kSectorSize, copy * kSectorSize);
+        if (result != CARD_ERROR_READY) break;
+        if (!MoonshineLayoutValid(record)) { invalid = true; continue; }
+        if (!generation || newer(record->generation, generation)) {
+            generation = record->generation;
+            best = copy;
+            memcpy(bestName, record->name, sizeof(bestName));
+        }
+    }
+    if (created) {
+        memset(sector, 0, kSectorSize);
+        result = CARDWrite(&file, sector, kSectorSize, kSectorSize);
+        if (result == CARD_ERROR_READY)
+            result = CARDRead(&file, sector, kSectorSize, kSectorSize);
+        if (result == CARD_ERROR_READY && MoonshineLayoutValid(record))
+            result = CARD_ERROR_IOERROR;
+    }
+    const s32 closed = CARDClose(&file);
+    if (result == CARD_ERROR_READY) result = closed;
+    if (result != CARD_ERROR_READY) {
+        mailbox->badMask |= 1u << slot;
+        return errorCode(result);
+    }
+    mailbox->presentMask &= ~(1u << slot);
+    mailbox->badMask &= ~(1u << slot);
+    if (generation) mailbox->presentMask |= 1u << slot;
+    else if (invalid) mailbox->badMask |= 1u << slot;
+    mailbox->generations[slot] = generation;
+    memcpy(mailbox->names[slot], bestName, sizeof(bestName));
+    if (operation == MOONSHINE_LAYOUT_LIST) return 0;
+    if (generation != mailbox->expectedGeneration) return MOONSHINE_LAYOUT_ERROR_CHANGED;
+    if (operation == MOONSHINE_LAYOUT_LOAD && !generation)
+        return invalid ? MOONSHINE_LAYOUT_ERROR_INVALID : MOONSHINE_LAYOUT_ERROR_EMPTY;
+
+    u32 expectedChecksum = 0;
+    if (operation == MOONSHINE_LAYOUT_SAVE) {
+        memset(sector, 0, kSectorSize);
+        memcpy(record, &mailbox->file, sizeof(*record));
+        u32 next = generation + 1;
+        if (!next) next = 1;
+        if (!MoonshineLayoutValid(record) || record->generation != next)
+            return MOONSHINE_LAYOUT_ERROR_INVALID;
+        generation = next;
+        expectedChecksum = record->checksum;
+        best ^= 1u;
+    }
+    result = CARDOpen(CARD_SLOTB, name, &file);
+    if (result != CARD_ERROR_READY) return errorCode(result);
+    if (operation == MOONSHINE_LAYOUT_SAVE)
+        result = CARDWrite(&file, sector, kSectorSize, best * kSectorSize);
+    else result = CARDRead(&file, sector, kSectorSize, best * kSectorSize);
+    s32 closeResult = CARDClose(&file);
+    if (result == CARD_ERROR_READY) result = closeResult;
+    if (result != CARD_ERROR_READY) return errorCode(result);
+    if (operation == MOONSHINE_LAYOUT_SAVE) {
+        result = CARDOpen(CARD_SLOTB, name, &file);
+        if (result != CARD_ERROR_READY) return errorCode(result);
+        result = CARDRead(&file, sector, kSectorSize, best * kSectorSize);
+        closeResult = CARDClose(&file);
+        if (result == CARD_ERROR_READY) result = closeResult;
+        if (result != CARD_ERROR_READY) return errorCode(result);
+    }
+    if (!MoonshineLayoutValid(record)) return MOONSHINE_LAYOUT_ERROR_INVALID;
+    if (record->generation != generation || (expectedChecksum && record->checksum != expectedChecksum))
+        return MOONSHINE_LAYOUT_ERROR_CHANGED;
+    if (created) {
+        fileStatus.mCommentAddr = kSectorSize - 64u;
+        result = CARDSetStatus(CARD_SLOTB, file.mFileNo, &fileStatus);
+        if (result != CARD_ERROR_READY) return errorCode(result);
+    }
+    memcpy(&mailbox->file, record, sizeof(*record));
+    mailbox->presentMask |= 1u << slot;
+    mailbox->badMask &= ~(1u << slot);
+    mailbox->generations[slot] = generation;
+    memcpy(mailbox->names[slot], record->name, MOONSHINE_LAYOUT_NAME_SIZE);
+    return 0;
+}
+
+void layoutProfilesLocked() {
+    MoonshineLayoutMailbox *mailbox = MOONSHINE_LAYOUT_PPC_PTR;
+    const u32 operation = mailbox->operation;
+    u32 status = 0;
+    if (mailbox->magic != MOONSHINE_LAYOUT_MAILBOX_MAGIC ||
+        mailbox->version != MOONSHINE_LAYOUT_MAILBOX_VERSION ||
+        operation < MOONSHINE_LAYOUT_LIST || operation > MOONSHINE_LAYOUT_LOAD ||
+        mailbox->reservedControl[0] || mailbox->reservedControl[1] ||
+        (operation != MOONSHINE_LAYOUT_LIST && mailbox->slot >= MOONSHINE_LAYOUT_COUNT)) {
+        status = MOONSHINE_LAYOUT_ERROR_INVALID;
+    } else if (operation != MOONSHINE_LAYOUT_LIST &&
+               mailbox->expectedGeneration != mailbox->generations[mailbox->slot]) {
+        status = MOONSHINE_LAYOUT_ERROR_CHANGED;
+    } else if (operation == MOONSHINE_LAYOUT_SAVE &&
+        (!MoonshineLayoutValid(&mailbox->file) || mailbox->file.generation !=
+         (mailbox->expectedGeneration == 0xffffffffu ? 1u : mailbox->expectedGeneration + 1u))) {
+        status = MOONSHINE_LAYOUT_ERROR_INVALID;
+    } else {
+        gpCardManager->unmount();
+        const s32 mounted = mount(gpCardManager->mCardWorkArea);
+        if (mounted != CARD_ERROR_READY) status = errorCode(mounted);
+        else {
+            if (operation == MOONSHINE_LAYOUT_LIST) {
+                for (u32 slot = 0; slot < MOONSHINE_LAYOUT_COUNT && !status; ++slot)
+                    status = layoutSlotLocked(mailbox, slot, operation);
+            } else status = layoutSlotLocked(mailbox, mailbox->slot, operation);
+            unmount();
+        }
+    }
+    mailbox->status = status;
+    mailbox->ackSeq = mailbox->requestSeq;
+}
+
 void initState() {
     sState = reinterpret_cast<State *>(SUSAMUNE_DOLPHIN_PERSIST_PPC_BASE);
     memset(sState, 0, sizeof(*sState));
@@ -670,6 +829,7 @@ s32 loadRecords(void *mountWork, Record *record) {
 InitResult init() {
     if (sInitResult != INIT_WAITING) return sInitResult;
     if (!gpCardManager) return INIT_WAITING;
+    memset(MOONSHINE_LAYOUT_PPC_PTR, 0, sizeof(MoonshineLayoutMailbox));
     const s32 probeResult = probe();
     if (probeResult != CARD_ERROR_READY) {
         sInitError = errorCode(probeResult);
@@ -705,6 +865,11 @@ InitResult init() {
     publishMarioColors();
     publishFluddColors();
     publishILEpisodes();
+    MoonshineLayoutMailbox *layout = MOONSHINE_LAYOUT_PPC_PTR;
+    memset(layout, 0, sizeof(*layout));
+    layout->magic = MOONSHINE_LAYOUT_MAILBOX_MAGIC;
+    layout->version = MOONSHINE_LAYOUT_MAILBOX_VERSION;
+    sState->cfg.flags |= MOONSHINE_LAYOUT_CFG_FLAG;
     sInitResult = INIT_READY;
     return sInitResult;
 }
@@ -716,7 +881,9 @@ void service() {
     const u32 ticket = sState->requested;
     const bool pending = ticket != sState->completed;
     OSUnlockMutex(&sState->mutex);
-    if (!pending) {
+    const MoonshineLayoutMailbox *layout = MOONSHINE_LAYOUT_PPC_PTR;
+    const bool layoutPending = layout->requestSeq != layout->ackSeq;
+    if (!pending && !layoutPending) {
         sState->idleObserved = false;
         return;
     }
@@ -742,14 +909,18 @@ void service() {
     // unmount() normally replaces this with CARDUnmount's result. Keep the
     // result Sunshine's state machine is waiting to observe.
     const s32 gameStatus = gpCardManager->mLastStatus;
-    const s32 result = writeRecordLocked();
+    s32 result = CARD_ERROR_READY;
+    if (pending) result = writeRecordLocked();
+    else layoutProfilesLocked();
     gpCardManager->mLastStatus = gameStatus;
     OSUnlockMutex(&gpCardManager->mMutex);
 
-    OSLockMutex(&sState->mutex);
-    sState->completedStatus = result;
-    sState->completed = ticket;
-    OSUnlockMutex(&sState->mutex);
+    if (pending) {
+        OSLockMutex(&sState->mutex);
+        sState->completedStatus = result;
+        sState->completed = ticket;
+        OSUnlockMutex(&sState->mutex);
+    }
 }
 
 SusamuneCfg *lock() {

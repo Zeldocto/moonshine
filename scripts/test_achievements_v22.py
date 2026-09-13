@@ -655,7 +655,7 @@ class AssistAndChallengeContracts(unittest.TestCase):
         self.assertNotIn("liveGlobalAssistReasons()", arm)
         begin = function_body(iling, r"void\s+beginAttemptScene\([^)]*\)")
         self.assertIn("sAssistReasons = liveGlobalAssistReasons();", begin)
-        self.assertIn("Records::invalidateAttempt(sAssistReasons);", begin)
+        self.assertRegex(begin, r"Records::invalidateAttempt\(sAssistReasons \? sAssistReasons\s*:\s*Assist::OTHER\);")
         self.assertIn("!sAwaitingStageSetup", update)
         self.assertIn("sAwaitingStageSetup", invalidator)
 

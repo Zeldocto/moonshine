@@ -780,7 +780,7 @@ class PlaylistFormatTests(unittest.TestCase):
         )
         self.assertRegex(
             reset_path,
-            r"sRecordsEligible\s*=\s*!sessionChildReset\s*&&",
+            r"sRecordsEligible\s*=\s*!sessionChildReset\s*&&\s*!sessionStartChanged\(\)",
         )
         self.assertNotIn("StageLoader::cancel();", reset_path)
 
@@ -789,20 +789,21 @@ class PlaylistFormatTests(unittest.TestCase):
         result = iling[iling.index("void recordResult(int entry, s32 qf)"):]
         result = result[:result.index("}  // namespace")]
         suppression = result[
-            result.index("if (sChildRetryContinuation)"):
+            result.index("if (sChildRetryContinuation || sessionStartChanged())"):
             result.index("sRecentQf[sRecentNext]")
         ]
-        self.assertIn("StageLoader::onILResult(entry, qf, false);", suppression)
+        self.assertIn("StageLoader::onILResult(entry, qf, sAssistReasons == 0 &&", suppression)
+        self.assertIn("StageLoader::mode() == StageLoader::MODE_LOADER", suppression)
         self.assertIn("return;", suppression)
         self.assertNotIn("Records::onILResult", suppression)
         self.assertNotIn("recordPB", suppression)
         self.assertNotIn("SplitStats::onILResult", suppression)
         self.assertLess(
-            result.index("if (sChildRetryContinuation)"),
+            result.index("if (sChildRetryContinuation || sessionStartChanged())"),
             result.index("Records::onILResult"),
         )
         self.assertLess(
-            result.index("if (sChildRetryContinuation)"),
+            result.index("if (sChildRetryContinuation || sessionStartChanged())"),
             result.index("recordPB(entry, qf)"),
         )
 
